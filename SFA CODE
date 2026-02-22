@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Farming Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f9f0;
+      margin: 0;
+      padding: 1rem;
+      color: #2d4a2d;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.2rem;
+    }
+    /* Adjust language-select positioning and width */
+    .language-select {
+      position: absolute;
+      top: 0;
+      right: 0;
+      margin: 1rem;
+      font-size: 1rem;
+      background: #d4edda;
+      border: 2px solid #28a745;
+      border-radius: 8px;
+      padding: 0.3rem 0.6rem;
+      color: #2d4a2d;
+      cursor: pointer;
+      width: 2cm; /* approx 2 cm width */
+      box-sizing: border-box;
+    }
+    .instructions {
+      background: #d4edda;
+      border: 2px solid #28a745;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: bold;
+    }
+    select, input[type="number"] {
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-top: 0.3rem;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 1rem;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 1rem;
+      font-size: 1.2rem;
+      border-radius: 8px;
+      width: 100%;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #a5d6a7;
+      cursor: not-allowed;
+    }
+    .voice-btn {
+      background-color: #2d7a2d;
+      margin-top: 0.5rem;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="header-title">Smart Farming Assistant</h1>
+    <p id="header-subtitle">Get simple, crop-specific advice based on sensor data</p>
+    <select id="languageSelect" class="language-select" aria-label="Select Language">
+      <option value="en">English</option>
+      <option value="kn">ಕನ್ನಡ</option>
+    </select>
+  </header>
+
+  <section>
+    <label for="crop" id="label-crop">Select Crop:</label>
+    <select id="crop" aria-label="Select Crop">
+      <option value="" id="option-choose-crop">-- Choose your crop --</option>
+      <option value="maize" id="option-maize">Maize</option>
+      <option value="rice" id="option-rice">Rice</option>
+      <option value="beans" id="option-beans">Beans</option>
+      <option value="tomato" id="option-tomato">Tomato</option>
+    </select>
+
+    <label for="soilMoisture" id="label-soilMoisture">Soil Moisture (%):</label>
+    <input type="number" id="soilMoisture" min="0" max="100" placeholder="Enter soil moisture" />
+
+    <label for="soilNutrients" id="label-soilNutrients">Soil Nutrients (NPK level):</label>
+    <input type="number" id="soilNutrients" min="0" max="100" placeholder="Enter nutrient level" />
+    
+    <!-- New Temperature input field -->
+    <label for="temperature" id="label-temperature">Temperature (°C):</label>
+    <input type="number" id="temperature" min="-10" max="60" placeholder="Enter temperature" />
+
+    <label for="weather" id="label-weather">Local Weather Condition:</label>
+    <select id="weather" aria-label="Select Weather Condition">
+      <option value="" id="option-select-weather">-- Select weather --</option>
+      <option value="dry" id="option-dry">Dry</option>
+      <option value="rainy" id="option-rainy">Rainy</option>
+      <option value="cloudy" id="option-cloudy">Cloudy</option>
+      <option value="sunny" id="option-sunny">Sunny</option>
+    </select>
+
+    <button id="getAdviceBtn" disabled>Get Advice</button>
+    <button id="speakBtn" class="voice-btn" disabled>🔊 Listen to Advice</button>
+
+    <div class="instructions" id="advice" aria-live="polite" role="region" style="display:none;"></div>
+  </section>
+
+  <footer class="footer" id="footer-text">
+    &copy; 2024 Smart Farming Assistant
+  </footer>
+
+  <script>
+    const translations = {
+      kn: {
+        "header-title": "ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ",
+        "header-subtitle": "ಸೆನ್ಸರ್ ಡೇಟಾದ ಮೇಲೆ ಸರಳ, ಬೆಳೆ-ನಿರ್ದಿಷ್ಟ ಸಲಹೆಗಳು ಪಡೆಯಿರಿ",
+        "label-crop": "ಬೆಳೆ ಆಯ್ಕೆಮಾಡಿ:",
+        "option-choose-crop": "-- ನಿಮ್ಮ ಬೆಳೆ ಆಯ್ಕೆಮಾಡಿ --",
+        "option-maize": "ಮೆಕ್ಕೆಜೋಳ",
+        "option-rice": "ನೀರುಹಿಟ್ಟು",
+        "option-beans": "ಬೀನ್ಸ್",
+        "option-tomato": "ಟೊಮೇಟೋ",
+        "label-soilMoisture": "ಮಣ್ಣಿನ ತೇವಾಂಶ (%):",
+        "soilMoisture": "ಮಣ್ಣಿನ ತೇವಾಂಶ ನಮೂದಿಸಿ",
+        "label-soilNutrients": "ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ (NPK ಮಟ್ಟ):",
+        "soilNutrients": "ಪೋಷಕಾಂಶ ಮಟ್ಟ ನಮೂದಿಸಿ",
+        "label-temperature": "ತಾಪಮಾನ (°C):",
+        "temperature": "ತಾಪಮಾನ ನಮೂದಿಸಿ",
+        "label-weather": "ಸ್ಥಳೀಯ ಹವಾಮಾನ ಸ್ಥಿತಿ:",
+        "option-select-weather": "-- ಹವಾಮಾನ ಆಯ್ಕೆಮಾಡಿ --",
+        "option-dry": "ಬಿಲ್ಲು",
+        "option-rainy": "ಮಳೆಯಾಗುತ್ತದೆ",
+        "option-cloudy": "ಮೇಘಾವೃತ",
+        "option-sunny": "ಬೆಳಗಿನ ಹೊತ್ತಿನಲ್ಲಿ",
+        "getAdviceBtn": "ಸಲಹೆ ಪಡೆಯಿರಿ",
+        "speakBtn": "🔊 ಸಲಹೆಯನ್ನು ಕೇಳಿ",
+        "footer-text": "© 2024 ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ"
+      },
+      en: {
+        "header-title": "Smart Farming Assistant",
+        "header-subtitle": "Get simple, crop-specific advice based on sensor data",
+        "label-crop": "Select Crop:",
+        "option-choose-crop": "-- Choose your crop --",
+        "option-maize": "Maize",
+        "option-rice": "Rice",
+        "option-beans": "Beans",
+        "option-tomato": "Tomato",
+        "label-soilMoisture": "Soil Moisture (%):",
+        "soilMoisture": "Enter soil moisture",
+        "label-soilNutrients": "Soil Nutrients (NPK level):",
+        "soilNutrients": "Enter nutrient level",
+        "label-temperature": "Temperature (°C):",
+        "temperature": "Enter temperature",
+        "label-weather": "Local Weather Condition:",
+        "option-select-weather": "-- Select weather --",
+        "option-dry": "Dry",
+        "option-rainy": "Rainy",
+        "option-cloudy": "Cloudy",
+        "option-sunny": "Sunny",
+        "getAdviceBtn": "Get Advice",
+        "speakBtn": "🔊 Listen to Advice",
+        "footer-text": "© 2024 Smart Farming Assistant"
+      }
+    };
+
+    const languageSelect = document.getElementById('languageSelect');
+    const cropSelect = document.getElementById('crop');
+    const soilMoistureInput = document.getElementById('soilMoisture');
+    const soilNutrientsInput = document.getElementById('soilNutrients');
+    const temperatureInput = document.getElementById('temperature');
+    const weatherSelect = document.getElementById('weather');
+    const getAdviceBtn = document.getElementById('getAdviceBtn');
+    const adviceDiv = document.getElementById('advice');
+    const speakBtn = document.getElementById('speakBtn');
+
+    function updateLanguageTexts(lang) {
+      for (const id in translations[lang]) {
+        const elem = document.getElementById(id);
+        if (elem) {
+          if (elem.tagName.toLowerCase() === 'input') {
+            elem.placeholder = translations[lang][id];
+          } else if (elem.tagName.toLowerCase() === 'option') {
+            elem.textContent = translations[lang][id];
+          } else if (elem.tagName.toLowerCase() === 'button') {
+            elem.textContent = translations[lang][id];
+          } else {
+            elem.textContent = translations[lang][id];
+          }
+        }
+      }
+    }
+
+    languageSelect.addEventListener('change', () => {
+      const lang = languageSelect.value;
+      updateLanguageTexts(lang);
+      validateInputs();
+      adviceDiv.style.display = 'none';
+      speakBtn.disabled = true;
+    });
+
+    function validateInputs() {
+      if (
+        cropSelect.value &&
+        soilMoistureInput.value !== '' &&
+        soilNutrientsInput.value !== '' &&
+        temperatureInput.value !== '' &&
+        weatherSelect.value
+      ) {
+        getAdviceBtn.disabled = false;
+      } else {
+        getAdviceBtn.disabled = true;
+        speakBtn.disabled = true;
+        adviceDiv.style.display = 'none';
+      }
+    }
+
+    cropSelect.addEventListener('change', validateInputs);
+    soilMoistureInput.addEventListener('input', validateInputs);
+    soilNutrientsInput.addEventListener('input', validateInputs);
+    temperatureInput.addEventListener('input', validateInputs);
+    weatherSelect.addEventListener('change', validateInputs);
+
+    function generateAdvice() {
+      const lang = languageSelect.value;
+      const crop = cropSelect.value;
+      const moisture = parseInt(soilMoistureInput.value, 10);
+      const nutrients = parseInt(soilNutrientsInput.value, 10);
+      const temperature = parseInt(temperatureInput.value, 10);
+      const weather = weatherSelect.value;
+
+      const adv_en = {
+        water_low: 'Soil moisture is low. Water your crop today for 15 minutes. ',
+        water_high: 'Soil moisture is high. Avoid watering to prevent waterlogging. ',
+        water_ok: 'Soil moisture is adequate. No watering needed now. ',
+        nutrient_low: 'Soil nutrients are low. Apply fertilizer according to crop needs. ',
+        nutrient_ok: 'Soil nutrients are sufficient. No fertilization needed now. ',
+        temp_low: 'Temperature is low. Protect plants from cold conditions. ',
+        temp_high: 'Temperature is high. Provide shade or irrigation to reduce heat stress. ',
+        temp_ok: 'Temperature is within the optimal range for growth. ',
+        weather_rainy: 'Rain is expected. Delay watering and check for pests after rain. ',
+        weather_dry: 'Dry weather expected. Monitor soil moisture closely. ',
+        crop_notes: {
+          maize: 'Maize requires regular monitoring during growth stages.',
+          rice: 'Rice fields need careful water management.',
+          beans: 'Beans benefit from balanced fertilization.',
+          tomato: 'Tomatoes are sensitive to overwatering.'
+        }
+      };
+
+      const adv_kn = {
+        water_low: 'ಮಣ್ಣಿನ ತೇವಾಂಶ ಕಡಿಮೆ ಇದೆ. ನಿಮ್ಮ ಬೆಳೆಗೆ ಇವತ್ತು 15 ನಿಮಿಷ ನೀರು ಕೊಡಿರಿ. ',
+        water_high: 'ಮಣ್ಣಿನ ತೇವಾಂಶ అధಿಕವಾಗಿದೆ. ಜಲನिरೋಧವನ್ನು ತಡೆಯಲು ನೀರುಡಿಸುವುದನ್ನು ತಪ್ಪಿಸಿ. ',
+        water_ok: 'ಮಣ್ಣಿನ ತೇವಾಂಶ ಸಮರ್ಪಕವಾಗಿದೆ. ಈಗ ನೀರು ಹಾಕುವ ಅಗತ್ಯವಿಲ್ಲ. ',
+        nutrient_low: 'ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ ಕಡಿಮೆ ಇದೆ. ಬೆಳೆ ಅಗತ್ಯಕ್ಕೆ ಅನುಗುಣವಾಗಿ ಉಪಪೋಷಣೆ ಮಾಡಿರಿ. ',
+        nutrient_ok: 'ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ ಸಮರ್ಪಕವಾಗಿದೆ. ಈಗ ಉಪಪೋಷಣೆಯ ಅಗತ್ಯವಿಲ್ಲ. ',
+        temp_low: 'ತಾಪಮಾನ ಕಡಿಮೆ ಇದೆ. ಬೆಳೆದಿರುವ ಗಿಡಗಳನ್ನು ತಂಪಿನಿಂದ ರಕ್ಷಿಸಿ. ',
+        temp_high: 'ತಾಪಮಾನ ಹೆಚ್ಚು ಇದೆ. ಹಾನಿ ತಪ್ಪಿಸಲು ನೆರಳೆ ಅಥವಾ ನೀರು ನೀಡಿರಿ. ',
+        temp_ok: 'ತಾಪಮಾನ ಬೆಳವಣಿಗೆಯ ಅನುಕೂಲಕರ ಶ್ರೇಣದಲ್ಲಿದೆ. ',
+        weather_rainy: 'ಮಳೆ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ. ನೀರುಡಿಸುವಿಕೆಯನ್ನು ವಿಳಂಬಮಾಡಿ ಮತ್ತು ಮಳೆಯಿಂದ ನಂತರ ಕೀಟಗಳ ಪರಿಶೀಲನೆ ಮಾಡಿ. ',
+        weather_dry: 'ಬಿಲ್ಲು ಹವಾಮಾನ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ. ಮಣ್ಣು ತೇವಾಂಶವನ್ನು ಸಮೀಪದಿಂದ ಪರಿಶೀಲಿಸಿ. ',
+        crop_notes: {
+          maize: 'ಮೆಕ್ಕೆಜೋಳ ಬೆಳವಣಿಗೆಯ ಹಂತಗಳಲ್ಲಿ ನಿಯಮಿತ ಪರಿಶೀಲನೆ ಅಗತ್ಯವಿದೆ.',
+          rice: 'ಅನ್ನ ಬೆಳೆಗಳಿಗೆ ಜಾಗರೂಕ ನೀರಿನ ನಿರ್ವಹಣೆ ಅಗತ್ಯ. ',
+          beans: 'ಬೀನ್ಸ್ ಸಮತೋಲನ ಪೋಷಣೆಯಿಂದ ಪ್ರಯೋಜನ ಪಡೆಯುತ್ತದೆ. ',
+          tomato: 'ಟೊಮೇಟೋಗಳು ಹೆಚ್ಚಿನ ನೀರಿನಿಂದ ಸಂವೇದನಶೀಲವಾಗಿವೆ.'
+        }
+      };
+
+      const adv = lang === 'kn' ? adv_kn : adv_en;
+
+      let advice = '';
+
+      // Watering advice
+      if (moisture < 30) {
+        advice += adv.water_low;
+      } else if (moisture > 70) {
+        advice += adv.water_high;
+      } else {
+        advice += adv.water_ok;
+      }
+
+      // Fertilization advice
+      if (nutrients < 40) {
+        advice += adv.nutrient_low;
+      } else {
+        advice += adv.nutrient_ok;
+      }
+
+      // Temperature advice
+      if (temperature < 15) {
+        advice += adv.temp_low;
+      } else if (temperature > 35) {
+        advice += adv.temp_high;
+      } else {
+        advice += adv.temp_ok;
+      }
+
+      // Weather-based advice
+      if (weather === 'rainy') {
+        advice += adv.weather_rainy;
+      } else if (weather === 'dry') {
+        advice += adv.weather_dry;
+      }
+
+      // Crop-specific note
+      if (adv.crop_notes[crop]) {
+        advice += adv.crop_notes[crop];
+      }
+
+      return advice;
+    }
+
+    getAdviceBtn.addEventListener('click', () => {
+      const adviceText = generateAdvice();
+      adviceDiv.textContent = adviceText;
+      adviceDiv.style.display = 'block';
+      speakBtn.disabled = false;
+    });
+
+    speakBtn.addEventListener('click', () => {
+      const text = adviceDiv.textContent;
+      if ('speechSynthesis' in window) {
+        const lang = languageSelect.value === 'kn' ? 'kn-IN' : 'en-US';
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+
+        const voices = window.speechSynthesis.getVoices();
+        
+        // For Kannada voice, attempt to find a voice with language "kn" or "kn-IN"
+        let voice = null;
+        if (lang === 'kn-IN') {
+          voice = voices.find(v => v.lang.toLowerCase().startsWith('kn'));
+        }
+        if (!voice) {
+          // Fallback: English US voice
+          voice = voices.find(v => v.lang.startsWith('en-US')) || voices[0];
+        }
+        if (voice) {
+          utterance.voice = voice;
+        }
+
+        window.speechSynthesis.speak(utterance);
+      } else {
+        alert(languageSelect.value === 'kn' ?
+          'ಕ್ಷಮಿಸಿ, ನಿಮ್ಮ ಬ್ರೌಸರ್ ಧ್ವನಿಸಿಂಥೆಸಿಸ್ ಅನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.' :
+          'Sorry, your browser does not support speech synthesis.'
+        );
+      }
+    });
+
+    // Initialize page text for default language (English)
+    updateLanguageTexts('en');
+  </script>
+</body>
+</html>
