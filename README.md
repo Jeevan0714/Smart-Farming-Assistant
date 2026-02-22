@@ -4,6 +4,16 @@ Smart Farming Assistant is an interactive, multilingual web application designed
 # Smart Farming Assistant - Agricultural HMI Web App
 🌐 **Live Demo:** [Try the Smart Farming Assistant Here](https://smartfarmingassisstant.netlify.app/)
 
+## 📸 Application in Action
+
+**English Interface (Evaluating Tomato Crop Constraints):**
+![Smart Farming Assistant English UI](image/english-version.png)
+*The English UI demonstrating the threshold-based logic engine. Here, the app warns against watering tomatoes due to high soil moisture (89%) and provides alerts for low temperatures (2°C).*
+
+**Kannada Interface (Evaluating Maize in Extreme Conditions):**
+![Smart Farming Assistant Kannada UI](images/kannada-version.png)
+*The fully localized Kannada interface. In this scenario, the system processes high heat (44°C) and rainy conditions for a maize crop, ensuring local farmers receive critical, easy-to-read instructions in their native language.*
+
 ## 📖 Overview
 The **Smart Farming Assistant** is a lightweight, dependency-free web application designed to serve as a Human-Machine Interface (HMI) for agricultural IoT systems. It bridges the gap between raw hardware sensor data and actionable farming practices by providing crop-specific advice based on real-time environmental variables. 
 
