@@ -6,10 +6,9 @@ Smart Farming Assistant is an interactive, multilingual web application designed
 
 ## 📸 Application in Action
 
-**English Interface (Evaluating Tomato Crop Constraints):**
+"**English Interface (Evaluating Tomato Crop Constraints):**"
 ![Smart Farming Assistant English UI](image/english-version.png)
 *The English UI demonstrating the threshold-based logic engine. Here, the app warns against watering tomatoes due to high soil moisture (89%) and provides alerts for low temperatures (2°C).*
-
 
 **Kannada Interface (Evaluating Maize in Extreme Conditions):**
 ![Smart Farming Assistant Kannada UI](images/kannada-version.png)
