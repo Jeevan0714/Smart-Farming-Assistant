@@ -52,3 +52,4 @@ Since this project uses a completely vanilla stack, no complex build tools or pa
 * API integration to pull live weather data (e.g., OpenWeatherMap) instead of manual user input.
 * Backend database integration to log historical sensor data and track crop growth cycles.
 * Direct WebSocket connection to ESP32 microcontrollers for real-time sensor data streaming.
+Direct WebSocket connection to ESP32 microcontrollers for real-time sensor data streaming.
