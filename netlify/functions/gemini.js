@@ -45,16 +45,17 @@ export const handler = async (event) => {
     // Determine fallback attempts based on payload
     const imageData = contents[0].parts.some(p => p.inline_data);
     
+    // Tiered Fallback Sequence (Prioritizing Latest Gemini 3.1 & 2.5 Models)
     const attempts = [
+      { ver: 'v1', model: 'gemini-3.1-flash' },
+      { ver: 'v1beta', model: 'gemini-3.1-flash' },
+      { ver: 'v1', model: 'gemini-3.1-pro' },
       { ver: 'v1', model: 'gemini-2.5-flash' },
       { ver: 'v1beta', model: 'gemini-2.5-flash' },
       { ver: 'v1', model: 'gemini-2.0-flash' },
       { ver: 'v1', model: 'gemini-1.5-flash' },
       { ver: 'v1beta', model: 'gemini-1.5-flash' },
-      { ver: 'v1', model: 'gemini-2.0-flash-exp' },
-      { ver: 'v1', model: 'gemini-1.5-flash-8b' },
-      { ver: 'v1', model: 'gemini-1.5-pro' },
-      { ver: 'v1beta', model: 'gemini-1.5-pro' }
+      { ver: 'v1', model: 'gemini-3.1-flash-lite' }
     ];
 
     if (!imageData) {
