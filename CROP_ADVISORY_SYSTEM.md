@@ -224,7 +224,8 @@ When we implement the Dynamic Crop Advisory System, we will keep the UI buttons 
      sending it to Google.
 
   3. Adjusted Safety & Model Logic
-  Google’s AI has very strict "Safety Filters" by default. Sometimes, words like "infected" or "disease" (which are necessary
+  Google’s AI has very str
+  ict "Safety Filters" by default. Sometimes, words like "infected" or "disease" (which are necessary
   for your farming app) can trigger a false alarm, causing the AI to return an empty response.
    * What I did: I adjusted the settings to tell the AI, "We are doing agricultural analysis, so it is okay to talk about
      leaf infections and diseases."

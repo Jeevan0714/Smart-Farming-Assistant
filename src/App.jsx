@@ -17,10 +17,16 @@ function App() {
   // Results & Speech State
   const [advice, setAdvice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechUtterance, setSpeechUtterance] = useState(null);
+
+  // Phase 4: AI Diagnosis & Voice State
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState('');
+  const [isListening, setIsListening] = useState(false);
   
   // Ref for smooth scrolling
   const adviceRef = useRef(null);
+  const aiRef = useRef(null);
 
   // Translations Dictionary
   const translations = {
@@ -29,7 +35,7 @@ function App() {
       "login-subtitle": "ಸೆನ್ಸರ್ ಡೇಟಾ, ಕೃತಕ ಬುದ್ಧಿಮತ್ತೆ ಮತ್ತು ಧ್ವನಿ ಸಹಾಯಕದೊಂದಿಗೆ ನಿಮ್ಮ ಬೆಳೆಗಳನ್ನು ಅತ್ಯುತ್ತಮವಾಗಿ ನಿರ್ವಹಿಸಲು ಸಹಾಯ ಮಾಡುವ ಕೃಷಿ ಪೋರ್ಟಲ್. ಮುಂದುವರಿಯಲು ಲಾಗಿನ್ ಮಾಡಿ.",
       "btn-login": "ಗೂಗಲ್‌ನೊಂದಿಗೆ ಲಾಗಿನ್ ಮಾಡಿ",
       "btn-logging-in": "ಲಾಗಿನ್ ಆಗುತ್ತಿದೆ...",
-      "lbl-mock": "ಡೆಮೊ ಸ್ಯಾಂಡ್‌ಬಾಕ್ಸ್ ಮೋಡ್",
+      "lbl-mock": "ಡೆಮೊ ಸ್ಯಾಂಡ್‌ಬาಕ್ಸ್ ಮೋಡ್",
       "lbl-prod": "ಲೈವ್ ಫೈರ್‌ಬೇಸ್ ಸಕ್ರಿಯ",
       "welcome-user": "ನಮಸ್ಕಾರ, ",
       "ready-message": "ಇವತ್ತಿನ ನಿಮ್ಮ ಬೆಳೆಗಳ ಸ್ಥಿತಿ ಪರಿಶೀಲಿಸಿ!",
@@ -39,9 +45,12 @@ function App() {
       "section-crop": "ಬೆಳೆ ಆಯ್ಕೆಮಾಡಿ",
       "section-telemetry": "ಸೆನ್ಸರ್ ಡೇಟಾ (ರಿಯಲ್-ಟೈಮ್ ಟೆಲಿಮೆಟ್ರಿ)",
       "section-weather": "ಸ್ಥಳೀಯ ಹವಾಮಾನ ಸ್ಥಿತಿ",
+      "section-ai": "AI ಬೆಳೆ ರೋಗ ಪತ್ತೆ",
+      "section-voice": "ಧ್ವನಿ ಸಹಾಯಕ",
       "label-moisture": "ಮಣ್ಣಿನ ತೇವಾಂಶ",
       "label-nutrients": "ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ (NPK)",
       "label-temperature": "ತಾಪಮಾನ",
+      "label-upload": "ಎಲೆಯ ಫೋಟೋ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
       "maize": "ಮೆಕ್ಕೆಜೋಳ",
       "rice": "ಭತ್ತ (ಅನ್ನ)",
       "beans": "ಬೀನ್ಸ್",
@@ -51,10 +60,16 @@ function App() {
       "weather-cloudy": "ಮೇಘಾವೃತ",
       "weather-sunny": "ಬೆಳಗಿನ ಹೊತ್ತು (ಬಿಸಿಲು)",
       "btn-get-advice": "ಸಲಹೆ ಪಡೆಯಿರಿ",
+      "btn-analyze-leaf": "AI ವಿಶ್ಲೇಷಣೆ ಪ್ರಾರಂಭಿಸಿ",
       "btn-speak": "🔊 ಸಲಹೆಯನ್ನು ಕೇಳಿ",
       "btn-stop": "⏹️ ಧ್ವನಿ ನಿಲ್ಲಿಸಿ",
+      "btn-voice-start": "🎤 ಪ್ರಶ್ನೆ ಕೇಳಲು ಒತ್ತಿ",
+      "btn-voice-stop": "🛑 ಆಲಿಸುವುದನ್ನು ನಿಲ್ಲಿಸಿ",
       "placeholder-advice": "ಇಲ್ಲಿ ನಿಮ್ಮ ಸಲಹೆ ಕಾಣಿಸುತ್ತದೆ...",
       "advice-header": "ನಿಮ್ಮ ಕೃಷಿ ಶಿಫಾರಸುಗಳು",
+      "ai-header": "AI ರೋಗ ವಿಶ್ಲೇಷಣೆ ಫಲಿತಾಂಶ",
+      "ai-processing": "AI ವಿಶ್ಲೇಷಿಸುತ್ತಿದೆ, ದಯವಿಟ್ಟು ಕಾಯಿರಿ...",
+      "voice-listening": "ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಆಲಿಸುತ್ತಿದೆ...",
       "footer-text": "© 2026 ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ | ಇಲೆಕ್ಟ್ರಾನಿಕ್ಸ್ ಮತ್ತು ಕಮ್ಯುನಿಕೇಷನ್ ಎಂಜಿನಿಯರಿಂಗ್, DBIT"
     },
     en: {
@@ -72,9 +87,12 @@ function App() {
       "section-crop": "Select Your Crop",
       "section-telemetry": "Sensor Data (Real-time Telemetry)",
       "section-weather": "Local Weather Conditions",
+      "section-ai": "AI Disease Diagnosis",
+      "section-voice": "AI Voice Assistant",
       "label-moisture": "Soil Moisture",
       "label-nutrients": "Soil Nutrients (NPK)",
       "label-temperature": "Temperature",
+      "label-upload": "Upload Leaf Image for Diagnosis",
       "maize": "Maize",
       "rice": "Rice",
       "beans": "Beans",
@@ -84,15 +102,28 @@ function App() {
       "weather-cloudy": "Cloudy",
       "weather-sunny": "Sunny",
       "btn-get-advice": "Analyze & Get Advice",
+      "btn-analyze-leaf": "Start AI Analysis",
       "btn-speak": "🔊 Listen to Advice",
       "btn-stop": "⏹️ Stop Listening",
+      "btn-voice-start": "🎤 Ask a Voice Question",
+      "btn-voice-stop": "🛑 Stop Listening",
       "placeholder-advice": "Your agricultural recommendations will appear here...",
       "advice-header": "Your Custom Advisory",
+      "ai-header": "AI Diagnosis Result",
+      "ai-processing": "AI is analyzing the leaf, please wait...",
+      "voice-listening": "Listening to your query...",
       "footer-text": "© 2026 Smart Farming Assistant | Dept of Electronics & Communication, DBIT"
     }
   };
 
   const t = translations[lang];
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
 
   // Auth observer for Production Firebase
   useEffect(() => {
@@ -113,16 +144,18 @@ function App() {
     }
   }, []);
 
-  // Stop reading if language changes to keep UI consistent
+  // Language Change Cleanup
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     stopSpeaking();
   }, [lang]);
 
-  // Clear advice and stop speaking when inputs change, requiring manual analyze trigger
+  // Input Change Cleanup
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAdvice('');
     stopSpeaking();
-  }, [crop, weather, soilMoisture, soilNutrients, temperature, lang]);
+  }, [crop, weather, soilMoisture, soilNutrients, temperature]);
 
   // Smoothly scroll to the advice panel whenever advice is generated
   useEffect(() => {
@@ -130,6 +163,139 @@ function App() {
       adviceRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [advice]);
+
+  // Smoothly scroll to AI Result
+  useEffect(() => {
+    if (aiResult && aiRef.current) {
+      aiRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [aiResult]);
+
+  // --- PHASE 4: AI & VOICE LOGIC ---
+
+  const callGeminiAPI = async (prompt, imageData = null) => {
+    const contents = [{
+      parts: [{ text: prompt }]
+    }];
+
+    if (imageData) {
+      const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+      contents[0].parts.push({
+        inline_data: {
+          mime_type: "image/jpeg",
+          data: base64Data
+        }
+      });
+    }
+
+    const payload = {
+      contents,
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+      ]
+    };
+
+    try {
+      // Point to our secure Netlify Function backend
+      const response = await fetch('/.netlify/functions/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return `AI Error (${response.status}): ${data.error?.message || 'Server connection failed'}`;
+      }
+
+      if (data.text) {
+        return data.text;
+      } else if (data.error === "SAFETY_BLOCKED") {
+        return "AI analysis was blocked by safety filters. Try a clearer image or different query.";
+      } else if (data.error === "PROMPT_BLOCKED") {
+        return `AI Blocked: ${data.reason}`;
+      } else {
+        return "AI returned an unexpected response. Please try again.";
+      }
+    } catch (e) {
+      console.error("Netlify Function Connection Error:", e);
+      return `Connection failed: ${e.message}. Please check your internet.`;
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result);
+        setAiResult('');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const analyzeLeaf = async () => {
+    if (!selectedImage) return;
+    setIsAnalyzing(true);
+    setAiResult('');
+
+    const prompt = `You are an expert agronomist. Analyze this leaf image and identify any diseases or pests. Provide a detailed diagnosis and recommended treatment in ${lang === 'kn' ? 'Kannada' : 'English'}. If no disease is found, provide general maintenance advice for the plant. Keep it concise and practical for a farmer.`;
+
+    const result = await callGeminiAPI(prompt, selectedImage);
+    setAiResult(result);
+    setIsAnalyzing(false);
+  };
+
+  const startVoiceAssistant = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setIsSpeaking(false);
+    };
+
+    recognition.onresult = async (event) => {
+      const transcript = event.results[0][0].transcript;
+      setIsListening(false);
+      setAiResult(lang === 'kn' ? `ನೀವು ಕೇಳಿದ್ದು: "${transcript}"\nAI ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಿರಿ...` : `You asked: "${transcript}"\nWaiting for AI response...`);
+      
+      const prompt = `You are a helpful farming assistant. Answer this farming query in ${lang === 'kn' ? 'Kannada' : 'English'}: ${transcript}`;
+      const result = await callGeminiAPI(prompt);
+      setAiResult(result);
+
+      // Auto-speak the response
+      const utterance = new SpeechSynthesisUtterance(result);
+      utterance.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
+      window.speechSynthesis.speak(utterance);
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
 
   // Check if form is valid to enable Advice button
   const isValid = crop !== '' && weather !== '';
@@ -151,7 +317,10 @@ function App() {
       signOut(auth).then(() => setUser(null));
     }
     setAdvice('');
-    stopSpeaking();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
   };
 
   const generateAdvice = () => {
@@ -181,6 +350,7 @@ function App() {
     const adv_kn = {
       water_low: 'ಮಣ್ಣಿನ ತೇವಾಂಶ ಕಡಿಮೆ ಇದೆ. ನಿಮ್ಮ ಬೆಳೆಗೆ ಇವತ್ತು 15 ನಿಮಿಷ ನೀರು ಕೊಡಿರಿ. ',
       water_high: 'ಮಣ್ಣಿನ ತೇವಾಂಶ ಅಧಿಕವಾಗಿದೆ. ಜಲನಿರೋಧವನ್ನು ತಡೆಯಲು ನೀರುಡಿಸುವುದನ್ನು ತಪ್ಪಿಸಿ. ',
+      weather_dry: 'ಬಿಲ್ಲು ಹವಾಮಾನ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ. ಮಣ್ಣಿನ ತೇವಾಂಶವನ್ನು ಹತ್ತಿರದಿಂದ ಪರಿಶೀಲಿಸಿ. ',
       water_ok: 'ಮಣ್ಣಿನ ತೇವಾಂಶ ಸಮರ್ಪಕವಾಗಿದೆ. ಈಗ ನೀರು ಹಾಕುವ ಅಗತ್ಯವಿಲ್ಲ. ',
       nutrient_low: 'ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ ಕಡಿಮೆ ಇದೆ. ಬೆಳೆ ಅಗತ್ಯಕ್ಕೆ ಅನುಗುಣವಾಗಿ ಉಪಪೋಷಣೆ ಮಾಡಿರಿ. ',
       nutrient_ok: 'ಮಣ್ಣಿನ ಪೋಷಕಾಂಶ ಸಮರ್ಪಕವಾಗಿದೆ. ಈಗ ಉಪಪೋಷಣೆಯ ಅಗತ್ಯವಿಲ್ಲ. ',
@@ -188,7 +358,6 @@ function App() {
       temp_high: 'ತಾಪಮಾನ ಹೆಚ್ಚು ಇದೆ. ಹಾನಿ ತಪ್ಪಿಸಲು ನೆರಳು ಅಥವಾ ನೀರು ನೀಡಿರಿ. ',
       temp_ok: 'ತಾಪಮಾನ ಬೆಳವಣಿಗೆಯ ಅನುಕೂಲಕರ ಶ್ರೇಣಿಯಲ್ಲಿದೆ. ',
       weather_rainy: 'ಮಳೆ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ. ನೀರುಡಿಸುವಿಕೆಯನ್ನು ವಿಳಂಬಮಾಡಿ ಮತ್ತು ಮಳೆಯ ನಂತರ ಕೀಟಗಳ ಪರಿಶೀಲನೆ ಮಾಡಿ. ',
-      weather_dry: 'ಬಿಲ್ಲು ಹವಾಮಾನ ನಿರೀಕ್ಷಿಸಲಾಗಿದೆ. ಮಣ್ಣಿನ ತೇವಾಂಶವನ್ನು ಹತ್ತಿರದಿಂದ ಪರಿಶೀಲಿಸಿ. ',
       crop_notes: {
         maize: 'ಮೆಕ್ಕೆಜೋಳ ಬೆಳವಣಿಗೆಯ ಹಂತಗಳಲ್ಲಿ ನಿಯಮಿತ ಪರಿಶೀಲನೆ ಅಗತ್ಯವಿದೆ.',
         rice: 'ಅನ್ನ ಬೆಳೆಗಳಿಗೆ ಜಾಗರೂಕ ನೀರಿನ ನಿರ್ವಹಣೆ ಅಗತ್ಯ. ',
@@ -237,7 +406,10 @@ function App() {
 
   const handleSpeak = () => {
     if (isSpeaking) {
-      stopSpeaking();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setIsSpeaking(false);
       return;
     }
 
@@ -266,7 +438,6 @@ function App() {
         setIsSpeaking(false);
       };
 
-      setSpeechUtterance(utterance);
       setIsSpeaking(true);
       window.speechSynthesis.speak(utterance);
     } else {
@@ -275,13 +446,6 @@ function App() {
         'Sorry, your browser does not support speech synthesis.'
       );
     }
-  };
-
-  const stopSpeaking = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    setIsSpeaking(false);
   };
 
   // --- RENDERING VIEWS ---
@@ -451,6 +615,74 @@ function App() {
           ))}
         </div>
       </section>
+
+      {/* PHASE 4: AI & VOICE UI */}
+      <div className="phase4-grid">
+        {/* Section 4: AI Diagnosis */}
+        <section className="glass-card ai-section">
+          <h2 className="section-title">📸 {t["section-ai"]}</h2>
+          <p className="form-label">{t["label-upload"]}</p>
+          
+          <div className="upload-container">
+            <input 
+              type="file" 
+              accept="image/*" 
+              onChange={handleImageUpload} 
+              id="leaf-upload" 
+              style={{ display: 'none' }}
+            />
+            <label htmlFor="leaf-upload" className="btn-upload">
+              {selectedImage ? "✅ Image Selected" : "📁 Choose Image"}
+            </label>
+            
+            {selectedImage && (
+              <div className="image-preview-wrapper">
+                <img src={selectedImage} alt="Preview" className="image-preview" />
+                <button 
+                  className="btn-primary" 
+                  onClick={analyzeLeaf} 
+                  disabled={isAnalyzing}
+                  style={{ width: '100%', marginTop: '1rem' }}
+                >
+                  {isAnalyzing ? t["ai-processing"] : t["btn-analyze-leaf"]}
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Section 5: Voice Assistant */}
+        <section className="glass-card voice-section">
+          <h2 className="section-title">🎙️ {t["section-voice"]}</h2>
+          <p className="form-label" style={{ marginBottom: '1.5rem' }}>Ask anything about farming!</p>
+          
+          <button 
+            className={`btn-voice ${isListening ? 'listening' : ''}`}
+            onClick={startVoiceAssistant}
+            disabled={isListening}
+          >
+            {isListening ? (
+              <>
+                <div className="pulse-ring"></div>
+                <span>{t["voice-listening"]}</span>
+              </>
+            ) : (
+              <span>{t["btn-voice-start"]}</span>
+            )}
+          </button>
+        </section>
+      </div>
+
+      {/* AI Result Display */}
+      {aiResult && (
+        <div ref={aiRef} className="glass-card advice-panel ai-result-panel">
+          <div className="advice-header">
+            <span>🤖</span>
+            <span>{t["ai-header"]}</span>
+          </div>
+          <p className="advice-content">{aiResult}</p>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="control-actions">
