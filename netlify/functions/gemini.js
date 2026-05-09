@@ -46,6 +46,9 @@ export const handler = async (event) => {
     const imageData = contents[0].parts.some(p => p.inline_data);
     
     const attempts = [
+      { ver: 'v1', model: 'gemini-2.5-flash' },
+      { ver: 'v1beta', model: 'gemini-2.5-flash' },
+      { ver: 'v1', model: 'gemini-2.0-flash' },
       { ver: 'v1', model: 'gemini-1.5-flash' },
       { ver: 'v1beta', model: 'gemini-1.5-flash' },
       { ver: 'v1', model: 'gemini-2.0-flash-exp' },
