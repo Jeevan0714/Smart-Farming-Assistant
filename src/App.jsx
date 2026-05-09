@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { auth, googleProvider, signInWithPopup, signOut } from './firebase';
 
 function App() {
-  // State variables for form input
+  // Authentication & Loading State
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Form State
   const [lang, setLang] = useState('en');
   const [crop, setCrop] = useState('');
   const [soilMoisture, setSoilMoisture] = useState(50);
@@ -9,7 +14,7 @@ function App() {
   const [temperature, setTemperature] = useState(25);
   const [weather, setWeather] = useState('');
   
-  // Results & UI state
+  // Results & Speech State
   const [advice, setAdvice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechUtterance, setSpeechUtterance] = useState(null);
@@ -17,9 +22,18 @@ function App() {
   // Ref for smooth scrolling
   const adviceRef = useRef(null);
 
-  // Translations
+  // Translations Dictionary
   const translations = {
     kn: {
+      "login-welcome": "ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕಕ್ಕೆ ಸುಸ್ವಾಗತ",
+      "login-subtitle": "ಸೆನ್ಸರ್ ಡೇಟಾ, ಕೃತಕ ಬುದ್ಧಿಮತ್ತೆ ಮತ್ತು ಧ್ವನಿ ಸಹಾಯಕದೊಂದಿಗೆ ನಿಮ್ಮ ಬೆಳೆಗಳನ್ನು ಅತ್ಯುತ್ತಮವಾಗಿ ನಿರ್ವಹಿಸಲು ಸಹಾಯ ಮಾಡುವ ಕೃಷಿ ಪೋರ್ಟಲ್. ಮುಂದುವರಿಯಲು ಲಾಗಿನ್ ಮಾಡಿ.",
+      "btn-login": "ಗೂಗಲ್‌ನೊಂದಿಗೆ ಲಾಗಿನ್ ಮಾಡಿ",
+      "btn-logging-in": "ಲಾಗಿನ್ ಆಗುತ್ತಿದೆ...",
+      "lbl-mock": "ಡೆಮೊ ಸ್ಯಾಂಡ್‌ಬಾಕ್ಸ್ ಮೋಡ್",
+      "lbl-prod": "ಲೈವ್ ಫೈರ್‌ಬೇಸ್ ಸಕ್ರಿಯ",
+      "welcome-user": "ನಮಸ್ಕಾರ, ",
+      "ready-message": "ಇವತ್ತಿನ ನಿಮ್ಮ ಬೆಳೆಗಳ ಸ್ಥಿತಿ ಪರಿಶೀಲಿಸಿ!",
+      "btn-logout": "ಲಾಗ್ ಔಟ್",
       "header-title": "ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ",
       "header-subtitle": "ಸೆನ್ಸರ್ ಡೇಟಾದ ಮೇಲೆ ಸರಳ, ಬೆಳೆ-ನಿರ್ದಿಷ್ಟ ಸಲಹೆಗಳು ಪಡೆಯಿರಿ",
       "section-crop": "ಬೆಳೆ ಆಯ್ಕೆಮಾಡಿ",
@@ -44,6 +58,15 @@ function App() {
       "footer-text": "© 2026 ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ | ಇಲೆಕ್ಟ್ರಾನಿಕ್ಸ್ ಮತ್ತು ಕಮ್ಯುನಿಕೇಷನ್ ಎಂಜಿನಿಯರಿಂಗ್, DBIT"
     },
     en: {
+      "login-welcome": "Welcome to Smart Farming Assistant",
+      "login-subtitle": "Get instant, tailored agricultural advice based on real-time IoT sensors, weather conditions, and audio synthesis. Please sign in to continue.",
+      "btn-login": "Sign in with Google",
+      "btn-logging-in": "Signing in...",
+      "lbl-mock": "Demo Sandbox Mode Enabled",
+      "lbl-prod": "Live Production Authentication Active",
+      "welcome-user": "Hello, ",
+      "ready-message": "Ready to check your crops today?",
+      "btn-logout": "Sign Out",
       "header-title": "Smart Farming Assistant",
       "header-subtitle": "Get simple, crop-specific advice based on sensor data",
       "section-crop": "Select Your Crop",
@@ -71,13 +94,65 @@ function App() {
 
   const t = translations[lang];
 
+  // Auth observer for Production Firebase
+  useEffect(() => {
+    if (auth) {
+      const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+        if (firebaseUser) {
+          setUser({
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName,
+            email: firebaseUser.email,
+            photoURL: firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100'
+          });
+        } else {
+          setUser(null);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
   // Stop reading if language changes to keep UI consistent
   useEffect(() => {
     stopSpeaking();
   }, [lang]);
 
+  // Clear advice and stop speaking when inputs change, requiring manual analyze trigger
+  useEffect(() => {
+    setAdvice('');
+    stopSpeaking();
+  }, [crop, weather, soilMoisture, soilNutrients, temperature, lang]);
+
+  // Smoothly scroll to the advice panel whenever advice is generated
+  useEffect(() => {
+    if (advice && adviceRef.current) {
+      adviceRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [advice]);
+
   // Check if form is valid to enable Advice button
   const isValid = crop !== '' && weather !== '';
+
+  const handleGoogleLogin = () => {
+    setIsLoading(true);
+    signInWithPopup(auth, googleProvider)
+      .catch((error) => {
+        console.error("Firebase Login Error:", error);
+        alert("Authentication failed. Please verify your internet connection.");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
+  const handleLogout = () => {
+    if (auth) {
+      signOut(auth).then(() => setUser(null));
+    }
+    setAdvice('');
+    stopSpeaking();
+  };
 
   const generateAdvice = () => {
     const moisture = parseInt(soilMoisture, 10);
@@ -125,7 +200,6 @@ function App() {
     const adv = lang === 'kn' ? adv_kn : adv_en;
     let adviceResult = '';
 
-    // Watering advice
     if (moisture < 30) {
       adviceResult += adv.water_low;
     } else if (moisture > 70) {
@@ -134,14 +208,12 @@ function App() {
       adviceResult += adv.water_ok;
     }
 
-    // Fertilization advice
     if (nutrients < 40) {
       adviceResult += adv.nutrient_low;
     } else {
       adviceResult += adv.nutrient_ok;
     }
 
-    // Temperature advice
     if (temp < 15) {
       adviceResult += adv.temp_low;
     } else if (temp > 35) {
@@ -150,33 +222,18 @@ function App() {
       adviceResult += adv.temp_ok;
     }
 
-    // Weather-based advice
     if (weather === 'rainy') {
       adviceResult += adv.weather_rainy;
     } else if (weather === 'dry') {
       adviceResult += adv.weather_dry;
     }
 
-    // Crop-specific note
     if (adv.crop_notes[crop]) {
       adviceResult += adv.crop_notes[crop];
     }
 
     setAdvice(adviceResult);
   };
-
-  // Clear advice and stop speaking when inputs change, requiring manual analyze trigger
-  useEffect(() => {
-    setAdvice('');
-    stopSpeaking();
-  }, [crop, weather, soilMoisture, soilNutrients, temperature, lang]);
-
-  // Smoothly scroll to the advice panel whenever advice is generated
-  useEffect(() => {
-    if (advice && adviceRef.current) {
-      adviceRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [advice]);
 
   const handleSpeak = () => {
     if (isSpeaking) {
@@ -227,29 +284,73 @@ function App() {
     setIsSpeaking(false);
   };
 
+  // --- RENDERING VIEWS ---
+
+  // 1. Render Google Auth Login Page (if user is not signed in)
+  if (!user) {
+    return (
+      <div className="glass-panel login-container">
+        {/* Language Switcher */}
+        <div className="language-container" style={{ alignSelf: 'stretch', marginBottom: '0rem' }}>
+          <div className="lang-btn-group" style={{ marginLeft: 'auto' }}>
+            <button className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>English</button>
+            <button className={`lang-btn ${lang === 'kn' ? 'active' : ''}`} onClick={() => setLang('kn')}>ಕನ್ನಡ</button>
+          </div>
+        </div>
+
+        <div className="login-illustration">🚜🌾</div>
+        <h1>{t["login-welcome"]}</h1>
+        <p className="login-subtitle">{t["login-subtitle"]}</p>
+
+        <button 
+          className="btn-google" 
+          onClick={handleGoogleLogin} 
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <div className="spinner"></div>
+              <span>{t["btn-logging-in"]}</span>
+            </>
+          ) : (
+            <>
+              <svg className="google-icon" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              <span>{t["btn-login"]}</span>
+            </>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  // 2. Render Main Dashboard (once user is successfully logged in)
   return (
     <div className="glass-panel">
-      {/* Language Switcher */}
-      <div className="language-container">
+      {/* Top Navigation Bar */}
+      <div className="top-nav">
+        <div className="user-profile">
+          <img className="user-avatar" src={user.photoURL} alt={user.displayName} />
+          <div className="user-details">
+            <span className="user-name">{t["welcome-user"]}{user.displayName.split(' ')[0]} 👋</span>
+            <button className="btn-logout" onClick={handleLogout}>{t["btn-logout"]}</button>
+          </div>
+        </div>
+
         <div className="lang-btn-group">
-          <button 
-            className={`lang-btn ${lang === 'en' ? 'active' : ''}`}
-            onClick={() => setLang('en')}
-          >
-            English
-          </button>
-          <button 
-            className={`lang-btn ${lang === 'kn' ? 'active' : ''}`}
-            onClick={() => setLang('kn')}
-          >
-            ಕನ್ನಡ
-          </button>
+          <button className={`lang-btn ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>English</button>
+          <button className={`lang-btn ${lang === 'kn' ? 'active' : ''}`} onClick={() => setLang('kn')}>ಕನ್ನಡ</button>
         </div>
       </div>
 
       {/* Main Header */}
       <header>
         <h1>{t["header-title"]}</h1>
+        <p style={{ color: '#a7f3d0', fontWeight: '500', marginBottom: '0.4rem' }}>{t["ready-message"]}</p>
         <p>{t["header-subtitle"]}</p>
       </header>
 
