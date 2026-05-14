@@ -6,6 +6,12 @@ export const BUILT_IN_CROPS = {
     name_en: 'Maize (Corn)',
     name_kn: 'ಮೆಕ್ಕೆಜೋಳ',
     emoji: '🌽',
+    lifecycle: [
+      { stage: 'Seedling', days: 15, thresholds: { soilMoisture: { low: 40, optimal_min: 50, optimal_max: 65, high: 80 }, nutrients: { low: 30, optimal_min: 45 } } },
+      { stage: 'Vegetative', days: 35, thresholds: { soilMoisture: { low: 45, optimal_min: 55, optimal_max: 75, high: 85 }, nutrients: { low: 40, optimal_min: 60 } } },
+      { stage: 'Flowering', days: 20, thresholds: { soilMoisture: { low: 50, optimal_min: 60, optimal_max: 80, high: 90 }, nutrients: { low: 45, optimal_min: 65 } } },
+      { stage: 'Maturity', days: 20, thresholds: { soilMoisture: { low: 35, optimal_min: 45, optimal_max: 60, high: 75 }, nutrients: { low: 30, optimal_min: 40 } } }
+    ],
     thresholds: {
       soilMoisture: { low: 40, optimal_min: 55, optimal_max: 75, high: 85 },
       nutrients:    { low: 35, optimal_min: 50, optimal_max: 70, high: 90 },
@@ -23,6 +29,12 @@ export const BUILT_IN_CROPS = {
     name_en: 'Rice (Paddy)',
     name_kn: 'ಭತ್ತ',
     emoji: '🌾',
+    lifecycle: [
+      { stage: 'Nursery', days: 25, thresholds: { soilMoisture: { low: 60, optimal_min: 75, optimal_max: 90, high: 95 }, nutrients: { low: 35, optimal_min: 50 } } },
+      { stage: 'Tillering', days: 40, thresholds: { soilMoisture: { low: 70, optimal_min: 80, optimal_max: 95, high: 100 }, nutrients: { low: 45, optimal_min: 65 } } },
+      { stage: 'Panicle Initiation', days: 30, thresholds: { soilMoisture: { low: 75, optimal_min: 85, optimal_max: 95, high: 100 }, nutrients: { low: 50, optimal_min: 70 } } },
+      { stage: 'Ripening', days: 30, thresholds: { soilMoisture: { low: 50, optimal_min: 60, optimal_max: 75, high: 85 }, nutrients: { low: 30, optimal_min: 45 } } }
+    ],
     thresholds: {
       soilMoisture: { low: 60, optimal_min: 70, optimal_max: 90, high: 95 },
       nutrients:    { low: 40, optimal_min: 60, optimal_max: 80, high: 95 },
@@ -40,6 +52,12 @@ export const BUILT_IN_CROPS = {
     name_en: 'Tomato',
     name_kn: 'ಟೊಮೇಟೋ',
     emoji: '🍅',
+    lifecycle: [
+      { stage: 'Seedling', days: 20, thresholds: { soilMoisture: { low: 50, optimal_min: 60, optimal_max: 70, high: 80 }, nutrients: { low: 40, optimal_min: 50 } } },
+      { stage: 'Vegetative', days: 25, thresholds: { soilMoisture: { low: 55, optimal_min: 65, optimal_max: 75, high: 85 }, nutrients: { low: 45, optimal_min: 60 } } },
+      { stage: 'Flowering', days: 20, thresholds: { soilMoisture: { low: 60, optimal_min: 70, optimal_max: 85, high: 90 }, nutrients: { low: 50, optimal_min: 70 } } },
+      { stage: 'Fruiting', days: 30, thresholds: { soilMoisture: { low: 50, optimal_min: 65, optimal_max: 80, high: 90 }, nutrients: { low: 45, optimal_min: 65 } } }
+    ],
     thresholds: {
       soilMoisture: { low: 50, optimal_min: 60, optimal_max: 80, high: 90 },
       nutrients:    { low: 45, optimal_min: 55, optimal_max: 75, high: 90 },
@@ -57,6 +75,12 @@ export const BUILT_IN_CROPS = {
     name_en: 'Beans',
     name_kn: 'ಬೀನ್ಸ್',
     emoji: '🫘',
+    lifecycle: [
+      { stage: 'Germination', days: 10, thresholds: { soilMoisture: { low: 40, optimal_min: 50, optimal_max: 65, high: 75 }, nutrients: { low: 25, optimal_min: 40 } } },
+      { stage: 'Vegetative', days: 30, thresholds: { soilMoisture: { low: 45, optimal_min: 55, optimal_max: 70, high: 80 }, nutrients: { low: 35, optimal_min: 50 } } },
+      { stage: 'Flowering', days: 15, thresholds: { soilMoisture: { low: 50, optimal_min: 60, optimal_max: 75, high: 85 }, nutrients: { low: 40, optimal_min: 55 } } },
+      { stage: 'Pod Filling', days: 25, thresholds: { soilMoisture: { low: 45, optimal_min: 55, optimal_max: 70, high: 80 }, nutrients: { low: 35, optimal_min: 50 } } }
+    ],
     thresholds: {
       soilMoisture: { low: 40, optimal_min: 50, optimal_max: 70, high: 80 },
       nutrients:    { low: 30, optimal_min: 45, optimal_max: 65, high: 85 },

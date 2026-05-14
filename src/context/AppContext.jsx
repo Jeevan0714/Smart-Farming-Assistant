@@ -19,6 +19,7 @@ export const AppProvider = ({ children }) => {
   const [activeCrop, setActiveCrop] = useState(null);
   const [customCrops, setCustomCrops] = useState([]);
   const [lang, setLang] = useState('en');
+  const [farmLocation, setFarmLocation] = useState(null); // Global Farm Location: { name, lat, lon }
   const [soilMoisture, setSoilMoisture] = useState(50);
   const [soilNutrients, setSoilNutrients] = useState(50);
   const [temperature, setTemperature] = useState(25);
@@ -46,11 +47,13 @@ export const AppProvider = ({ children }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
   const [isFetchingAI, setIsFetchingAI] = useState(false);
   
   // Refs
   const adviceRef = useRef(null);
   const aiRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   // Global Data Loader
   const loadUserData = async (currentUser) => {
@@ -72,6 +75,12 @@ export const AppProvider = ({ children }) => {
 
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        
+        // Load global farm location
+        if (userData.farmLocation) {
+          setFarmLocation(userData.farmLocation);
+        }
+
         if (userData.activeCropId) {
           const cropId = userData.activeCropId;
           const baseCrop = BUILT_IN_CROPS[cropId] || customList.find(c => c.id === cropId);
@@ -129,7 +138,8 @@ export const AppProvider = ({ children }) => {
       "advice-header": "ನಿಮ್ಮ ಕೃಷಿ ಶಿಫಾರಸುಗಳು",
       "ai-header": "AI ರೋಗ ವಿಶ್ಲೇಷಣೆ ಫಲಿತಾಂಶ",
       "ai-processing": "AI ವಿಶ್ಲೇಷಿಸುತ್ತಿದೆ, ದಯವಿಟ್ಟು ಕಾಯಿರಿ...",
-      "voice-listening": "ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಆಲಿಸುತ್ತಿದೆ...",
+      "voice-listening": "ಧ್ವನಿ ಆಲಿಸುತ್ತಿದೆ... ಮಾತನಾಡಿ",
+      "voice-stop-hint": "ಮಾತನಾಡಿ ಮುಗಿಸಿದ ಮೇಲೆ ನಿಲ್ಲಿಸಿ",
       "footer-text": "© 2026 ಸ್ಮಾರ್ಟ್ ಕೃಷಿ ಸಹಾಯಕ | ಇಲೆಕ್ಟ್ರಾನಿಕ್ಸ್ ಮತ್ತು ಕಮ್ಯುನಿಕೇಷನ್ ಎಂಜಿನಿಯರಿಂಗ್, DBIT",
       "nav-dashboard": "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
       "nav-crops": "ಬೆಳೆಗಳು",
@@ -169,12 +179,13 @@ export const AppProvider = ({ children }) => {
       "btn-speak": "🔊 Listen to Advice",
       "btn-stop": "⏹️ Stop Listening",
       "btn-voice-start": "🎤 Ask a Voice Question",
-      "btn-voice-stop": "🛑 Stop Listening",
+      "btn-voice-stop": "🛑 Stop & Ask AI",
       "placeholder-advice": "Your agricultural recommendations will appear here...",
       "advice-header": "Your Custom Advisory",
       "ai-header": "AI Diagnosis Result",
       "ai-processing": "AI is analyzing the leaf, please wait...",
-      "voice-listening": "Listening to your query...",
+      "voice-listening": "Listening... Speak now",
+      "voice-stop-hint": "Click stop when you finish speaking",
       "footer-text": "© 2026 Smart Farming Assistant | Dept of Electronics & Communication, DBIT",
       "nav-dashboard": "Dashboard",
       "nav-crops": "Crops",
@@ -274,6 +285,7 @@ export const AppProvider = ({ children }) => {
         setUser(null);
         setActiveCrop(null);
         setCustomCrops([]);
+        setFarmLocation(null);
       }
     });
     return () => unsubscribe();
@@ -282,16 +294,15 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (user) {
       if (activeCrop?.location?.lat) {
-        // If we already have a location name and it matches the crop's location name, 
-        // we might not need to fetch weather immediately if it was just set.
-        // But for simplicity, we just fetch, but ensures manual coords are used.
         fetchWeather(true, activeCrop.location.lat, activeCrop.location.lon);
+      } else if (farmLocation?.lat) {
+        fetchWeather(true, farmLocation.lat, farmLocation.lon);
       } else {
         fetchWeather(true);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeCrop?.id]);
+  }, [user, activeCrop?.id, farmLocation?.lat]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -321,7 +332,29 @@ export const AppProvider = ({ children }) => {
     if (!selectedImage) return;
     setIsAnalyzing(true);
     setAiResult('');
-    const prompt = `You are an expert agronomist. Analyze this leaf image and identify any diseases or pests. Provide a detailed diagnosis and recommended treatment in ${lang === 'kn' ? 'Kannada' : 'English'}. If no disease is found, provide general maintenance advice for the plant. Keep it concise and practical for a farmer.`;
+    
+    const prompt = `You are a helpful, expert agricultural assistant. A farmer has uploaded a picture of a leaf. Your job is to analyze the leaf for diseases, pests, or nutrient deficiencies and give the farmer a clear, actionable plan.
+
+Rules for your response:
+
+Use extremely simple, everyday language.
+
+Do not use complex scientific names or long paragraphs.
+
+Keep it short and directly to the point.
+
+If you are unsure, tell the farmer to consult a local agriculture expert.
+
+Provide your entire response in ${lang === 'kn' ? 'Kannada' : 'English'}.
+
+Always format your response exactly like this using these headers:
+
+🌿 Crop & Problem: [Name the crop] - [Name the disease/pest, or say 'Healthy']
+⚠️ Danger Level: [Low / Medium / High]
+🛠️ What to do today: [1 or 2 simple things to do immediately in the field]
+💊 Treatment Plan: [Suggest 1 common chemical spray and 1 organic/home remedy]
+🛡️ Prevention: [1 simple tip to stop this from happening again]`;
+
     const result = await callGeminiAPI(prompt, selectedImage);
     setAiResult(result);
     setIsAnalyzing(false);
@@ -330,27 +363,66 @@ export const AppProvider = ({ children }) => {
   const startVoiceAssistant = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
+    
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    
     recognition.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
     recognition.onstart = () => {
       setIsListening(true);
+      setTranscript('');
+      setAiResult('');
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       setIsSpeaking(false);
     };
-    recognition.onresult = async (event) => {
-      const transcript = event.results[0][0].transcript;
+
+    recognition.onresult = (event) => {
+      let currentTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        currentTranscript += event.results[i][0].transcript;
+      }
+      setTranscript(currentTranscript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech Recognition Error", event);
       setIsListening(false);
-      setAiResult(lang === 'kn' ? `ನೀವು ಕೇಳಿದ್ದು: "${transcript}"\nAI ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಿರಿ...` : `You asked: "${transcript}"\nWaiting for AI response...`);
-      const prompt = `You are a helpful farming assistant. Answer this farming query in ${lang === 'kn' ? 'Kannada' : 'English'}: ${transcript}`;
-      const result = await callGeminiAPI(prompt);
-      setAiResult(result);
+    };
+
+    recognition.onend = () => {
+      // Logic for automatic restart could go here if we wanted truly infinite listening
+    };
+
+    recognition.start();
+  };
+
+  const stopVoiceAssistant = async () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    
+    setIsListening(false);
+    
+    if (!transcript.trim()) {
+      setAiResult(lang === 'kn' ? "ಕ್ಷಮಿಸಿ, ನನಗೇನು ಕೇಳಿಸಲಿಲ್ಲ." : "Sorry, I didn't catch that.");
+      return;
+    }
+
+    setAiResult(lang === 'kn' ? `ನೀವು ಕೇಳಿದ್ದು: "${transcript}"\nAI ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಿರಿ...` : `You asked: "${transcript}"\nWaiting for AI response...`);
+    
+    const prompt = `You are a helpful farming assistant. Answer this farming query in ${lang === 'kn' ? 'Kannada' : 'English'}: ${transcript}`;
+    const result = await callGeminiAPI(prompt);
+    
+    setAiResult(result);
+    
+    if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(result);
       utterance.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
       window.speechSynthesis.speak(utterance);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
-    recognition.start();
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -405,11 +477,13 @@ export const AppProvider = ({ children }) => {
     isSpeaking, setIsSpeaking,
     selectedImage, setSelectedImage, isAnalyzing, setIsAnalyzing,
     aiResult, setAiResult, isListening, setIsListening,
+    transcript, setTranscript, stopVoiceAssistant,
     isFetchingAI, setIsFetchingAI,
     adviceRef, aiRef, t,
     stopSpeaking, handleImageUpload, analyzeLeaf, fetchWeather,
     startVoiceAssistant, handleGoogleLogin, handleLogout,
-    generateAdvice, handleSpeak, loadUserData
+    generateAdvice, handleSpeak, loadUserData,
+    farmLocation, setFarmLocation
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

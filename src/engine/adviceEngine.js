@@ -1,11 +1,54 @@
 // src/engine/adviceEngine.js
 
+// src/engine/adviceEngine.js
+
+/**
+ * Calculates the current growth stage based on planting date and lifecycle data
+ */
+export function getCurrentStage(crop, plantingDate) {
+  if (!crop || !crop.lifecycle || !plantingDate) return null;
+  
+  const start = new Date(plantingDate);
+  const now = new Date();
+  const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+  
+  let accumulatedDays = 0;
+  for (const phase of crop.lifecycle) {
+    accumulatedDays += phase.days;
+    if (diffDays <= accumulatedDays) {
+      return { ...phase, daysPassed: diffDays };
+    }
+  }
+  
+  return { ...crop.lifecycle[crop.lifecycle.length - 1], daysPassed: diffDays, isOverdue: true };
+}
+
 export function generateRuleAdvice(crop, moisture, nutrients, temperature, weather, lang) {
   if (!crop || !crop.thresholds) return [];
   
-  const t = crop.thresholds;
+  // Use stage-specific thresholds if available
+  const currentStage = getCurrentStage(crop, crop.plantingDate);
+  const stageThresholds = currentStage?.thresholds;
+  
+  const t = {
+    soilMoisture: stageThresholds?.soilMoisture || crop.thresholds.soilMoisture,
+    nutrients: stageThresholds?.nutrients || crop.thresholds.nutrients,
+    temperature: crop.thresholds.temperature // Temperature usually remains crop-wide
+  };
+
   const L = lang;
   const alerts = [];
+
+  // Stage Info (Informational)
+  if (currentStage) {
+    alerts.push({
+      type: 'stage',
+      severity: 'info',
+      text: L === 'en' 
+        ? `Crop is in ${currentStage.stage} stage (Day ${currentStage.daysPassed}).` 
+        : `ಬೆಳೆಯು ${currentStage.stage} ಹಂತದಲ್ಲಿದೆ (ದಿನ ${currentStage.daysPassed}).`
+    });
+  }
 
   // Moisture Alert
   if (moisture < t.soilMoisture.low) {
@@ -36,7 +79,7 @@ export function generateRuleAdvice(crop, moisture, nutrients, temperature, weath
     alerts.push({ 
       type: 'moisture', 
       severity: 'ok', 
-      text: L === 'en' ? 'Moisture level is optimal for growth.' : 'ತೇವಾಂಶದ ಮಟ್ಟವು ಬೆಳವಣಿಗೆಗೆ ಅತ್ಯುತ್ತಮವಾಗಿದೆ.' 
+      text: L === 'en' ? 'Moisture level is optimal for this stage.' : 'ಈ ಹಂತಕ್ಕೆ ತೇವಾಂಶದ ಮಟ್ಟವು ಅತ್ಯುತ್ತಮವಾಗಿದೆ.' 
     });
   }
 
@@ -57,7 +100,7 @@ export function generateRuleAdvice(crop, moisture, nutrients, temperature, weath
     alerts.push({ 
       type: 'nutrients', 
       severity: 'ok', 
-      text: L === 'en' ? 'Soil nutrients are sufficient.' : 'ಮಣ್ಣಿನ ಪೋಷಕಾಂಶಗಳು ಸಮರ್ಪಕವಾಗಿವೆ.' 
+      text: L === 'en' ? 'Soil nutrients are sufficient for current needs.' : 'ಪ್ರಸ್ತುತ ಅಗತ್ಯಗಳಿಗೆ ಮಣ್ಣಿನ ಪೋಷಕಾಂಶಗಳು ಸಮರ್ಪಕವಾಗಿವೆ.' 
     });
   }
 
@@ -90,3 +133,4 @@ export function generateRuleAdvice(crop, moisture, nutrients, temperature, weath
 
   return alerts;
 }
+
