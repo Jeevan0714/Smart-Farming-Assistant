@@ -11,7 +11,7 @@ export const handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const API_KEY = process.env.GEMINI_API_KEY;
+  const API_KEY = process.env.GEMINI_API_KEY?.trim();
   if (!API_KEY) {
     return { 
       statusCode: 500, 
@@ -54,18 +54,29 @@ export const handler = async (event) => {
     // Determine if request has image data
     const imageData = contents[0].parts.some(p => p.inline_data);
     
-    // Tiered Fallback Sequence (Prioritizing Stable & Fast Models)
+    // Tiered Fallback Sequence (Updated for May 2026: Prioritizing Cost-Efficient & Latest Models)
     const attempts = [
-      { ver: 'v1', model: 'gemini-1.5-flash' },
-      { ver: 'v1beta', model: 'gemini-1.5-flash' },
+      // 1. Ultra-low cost / High Volume (Best for credits)
       { ver: 'v1', model: 'gemini-1.5-flash-8b' },
-      { ver: 'v1', model: 'gemini-2.0-flash' },
-      { ver: 'v1beta', model: 'gemini-2.0-flash' },
-      { ver: 'v1', model: 'gemini-1.5-pro' }
+      { ver: 'v1', model: 'gemini-1.5-flash' },
+
+      // 2. Latest Generation (May 2026) - Optimized "Lite" variants
+      { ver: 'v1', model: 'gemini-3.1-flash-lite' },
+      { ver: 'v1', model: 'gemini-2.5-flash-lite' },
+
+      // 3. Latest Generation (May 2026) - Standard Flash
+      { ver: 'v1', model: 'gemini-3.1-flash' },
+      { ver: 'v1', model: 'gemini-2.5-flash' },
+
+      // 4. Stable Fallbacks (if newer ones are overloaded)
+      { ver: 'v1beta', model: 'gemini-3.1-flash' },
+      { ver: 'v1beta', model: 'gemini-2.5-flash' }
     ];
 
+    // Pro models are expensive; only use if Flash fails or for complex reasoning (non-image)
     if (!imageData) {
-      attempts.push({ ver: 'v1', model: 'gemini-1.0-pro' });
+      attempts.push({ ver: 'v1', model: 'gemini-2.5-pro' });
+      attempts.push({ ver: 'v1', model: 'gemini-3.1-pro' });
     }
 
     let lastError = null;
