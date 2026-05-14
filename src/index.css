@@ -54,7 +54,7 @@ body {
 .app-container {
   display: flex;
   min-height: 100vh;
-  transition: background 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 
@@ -498,10 +498,24 @@ header p {
 .spinner {
   width: 20px;
   height: 20px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #3b82f6;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  width: 100%;
+}
+
+.spinner.mini {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
 }
 
 @keyframes spin {

@@ -18,7 +18,7 @@ const CropManager = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   
   // Form State for Custom Crop
-  const [newCrop, setNewCrop] = useState({
+  const initialCropState = {
     name_en: '',
     name_kn: '',
     emoji: '🌱',
@@ -32,7 +32,9 @@ const CropManager = () => {
       nutrients: { low: 30, optimal_min: 50, optimal_max: 70, high: 90 },
       temperature: { low: 10, optimal_min: 20, optimal_max: 30, high: 40 }
     }
-  });
+  };
+
+  const [newCrop, setNewCrop] = useState(initialCropState);
 
   // Location selection state
   const [locationMode, setLocationMode] = useState(null); // 'prompt', 'gps', 'manual'
@@ -49,7 +51,18 @@ const CropManager = () => {
     try {
       const profile = await generateCropProfile(newCrop.name_en, lang);
       if (profile) {
-        setNewCrop(profile);
+        // Safe deep merge to prevent UI crashes on partial AI data
+        setNewCrop(prev => ({
+          ...prev,
+          ...profile,
+          thresholds: {
+            ...prev.thresholds,
+            ...(profile.thresholds || {}),
+            soilMoisture: { ...prev.thresholds.soilMoisture, ...(profile.thresholds?.soilMoisture || {}) },
+            nutrients: { ...prev.thresholds.nutrients, ...(profile.thresholds?.nutrients || {}) },
+            temperature: { ...prev.thresholds.temperature, ...(profile.thresholds?.temperature || {}) }
+          }
+        }));
       } else {
         alert(lang === 'kn' ? "AI ನಿಂದ ಪ್ರೊಫೈಲ್ ರಚಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ." : "Could not generate profile with AI.");
       }
@@ -76,12 +89,6 @@ const CropManager = () => {
 
   const currentStageInfo = activeCrop ? getCurrentStage(activeCrop, activeCrop.plantingDate) : null;
 
-  useEffect(() => {
-    if (user && customCrops.length === 0 && !activeCrop && !isDataLoading) {
-      loadUserData(user);
-    }
-  }, [user]);
-
   const handleSetActiveCrop = (cropId) => {
     const selectedCrop = BUILT_IN_CROPS[cropId] || customCrops.find(c => c.id === cropId);
     if (!selectedCrop) {
@@ -93,7 +100,10 @@ const CropManager = () => {
   };
 
   const confirmSetActiveCrop = async (locationData) => {
-    if (!pendingCrop || !user) return;
+    if (!pendingCrop || !user) {
+      alert(lang === 'kn' ? "ಬೆಳೆ ಅಥವಾ ಬಳಕೆದಾರ ಮಾಹಿತಿ ಇಲ್ಲ." : "Missing crop or user information.");
+      return;
+    }
     setIsProcessing(true);
 
     try {
@@ -115,54 +125,77 @@ const CropManager = () => {
       setActiveCrop({ ...pendingCrop, ...activeFieldInfo });
       setPendingCrop(null);
       setLocationMode(null);
+      setSearchResults([]);
+      setLocationQuery('');
+      
+      alert(lang === 'kn' ? "ಬೆಳೆಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ!" : "Crop activated successfully!");
     } catch (e) {
       console.error("Error setting active crop:", e);
+      alert(lang === 'kn' ? "ಬೆಳೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಫಲವಾಗಿದೆ." : "Failed to activate crop.");
     } finally {
       setIsProcessing(false);
     }
   };
 
   const searchManualLocation = async () => {
-    if (!locationQuery || isProcessing) return;
+    if (!locationQuery.trim() || isProcessing) return;
     setIsProcessing(true);
+    setSearchResults([]);
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationQuery)}&limit=5`;
       const res = await fetch(url);
       const data = await res.json();
+      if (data.length === 0) {
+        alert(lang === 'kn' ? "ಯಾವುದೇ ಸ್ಥಳ ಕಂಡುಬಂದಿಲ್ಲ." : "No locations found.");
+      }
       setSearchResults(data);
     } catch (e) {
       console.error("Location search failed:", e);
+      alert(lang === 'kn' ? "ಹುಡುಕಾಟ ವಿಫಲವಾಗಿದೆ." : "Search failed.");
     } finally {
       setIsProcessing(false);
     }
   };
 
   const requestGPSLocation = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      alert(lang === 'kn' ? "ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಜಿಯೋಲೋಕೇಶನ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ." : "Geolocation not supported.");
+      return;
+    }
     setIsProcessing(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
         await confirmSetActiveCrop({ name: 'Current Location', lat: latitude, lon: longitude });
       },
-      () => {
+      (err) => {
         setIsProcessing(false);
+        console.warn("GPS failed", err);
+        alert(lang === 'kn' ? "ಸ್ಥಳ ಪಡೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಹಸ್ತಚಾಲಿತವಾಗಿ ಹುಡುಕಿ." : "Could not get location. Please search manually.");
         setLocationMode('manual');
-      }
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
     );
   };
 
   const saveCustomCrop = async () => {
-    if (!newCrop.name_en || !newCrop.name_kn) return;
+    if (!newCrop.name_en?.trim() || !newCrop.name_kn?.trim()) {
+      alert(lang === 'kn' ? "ದಯವಿಟ್ಟು ಎಲ್ಲಾ ಹೆಸರುಗಳನ್ನು ಭರ್ತಿ ಮಾಡಿ." : "Please fill in all names.");
+      return;
+    }
     setIsProcessing(true);
     try {
       const cropId = `custom_${Date.now()}`;
       const docRef = doc(db, 'users', user.uid, 'customCrops', cropId);
-      await setDoc(docRef, { ...newCrop, id: cropId });
-      setCustomCrops([...customCrops, { ...newCrop, id: cropId }]);
+      const cropToSave = { ...newCrop, id: cropId };
+      await setDoc(docRef, cropToSave);
+      setCustomCrops(prev => [...prev, cropToSave]);
       setShowCreator(false);
+      setNewCrop(initialCropState);
+      alert(lang === 'kn' ? "ಹೊಸ ಬೆಳೆ ಉಳಿಸಲಾಗಿದೆ!" : "Custom crop saved!");
     } catch (e) {
       console.error("Error saving custom crop:", e);
+      alert(lang === 'kn' ? "ಉಳಿಸಲು ವಿಫಲವಾಗಿದೆ." : "Failed to save crop.");
     } finally {
       setIsProcessing(false);
     }
@@ -170,12 +203,24 @@ const CropManager = () => {
 
   const deleteCustomCrop = async (id, e) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this crop?')) return;
+    if (!window.confirm(lang === 'kn' ? 'ಈ ಬೆಳೆಯನ್ನು ಅಳಿಸುವುದೇ?' : 'Delete this crop?')) return;
+    
+    setIsProcessing(true);
     try {
+      // If the crop being deleted is active, reset field first
+      if (activeCrop && activeCrop.id === id) {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, { activeCropId: null, activeFieldInfo: null }, { merge: true });
+        setActiveCrop(null);
+      }
+      
       await deleteDoc(doc(db, 'users', user.uid, 'customCrops', id));
       setCustomCrops(customCrops.filter(c => c.id !== id));
     } catch (e) {
       console.error("Delete failed:", e);
+      alert(lang === 'kn' ? "ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ." : "Delete failed.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -239,7 +284,7 @@ const CropManager = () => {
             <div key={crop.id} className={`crop-option custom ${activeCrop?.id === crop.id ? 'active' : ''}`} onClick={() => handleSetActiveCrop(crop.id)}>
               <span className="emoji">{crop.emoji}</span>
               <span className="label">{lang === 'kn' ? crop.name_kn : crop.name_en}</span>
-              <button className="btn-delete" onClick={(e) => deleteCustomCrop(crop.id, e)}><Trash2 size={14} /></button>
+              <button className="btn-delete" onClick={(e) => deleteCustomCrop(crop.id, e)} disabled={isProcessing}><Trash2 size={14} /></button>
             </div>
           ))}
         </div>
@@ -247,23 +292,49 @@ const CropManager = () => {
 
       {showCreator && (
         <div className="modal-overlay">
-          <div className="glass-card creator-modal" style={{ maxWidth: '500px' }}>
+          <div className="glass-card creator-modal" style={{ maxWidth: '500px', width: '90%' }}>
             <button className="btn-close" onClick={() => setShowCreator(false)}><X size={18} /></button>
-            <h3>{lang === 'kn' ? 'ಹೊಸ ಬೆಳೆ' : 'New Crop Profile'}</h3>
+            <h3>{lang === 'kn' ? 'ಹೊಸ ಬೆಳೆ ಪೊಬೈಲ್' : 'New Crop Profile'}</h3>
             
-            <div className="form-group" style={{ marginTop: '1rem' }}>
-              <label>English Name</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input type="text" value={newCrop.name_en} onChange={e => setNewCrop({...newCrop, name_en: e.target.value})} placeholder="e.g. Cotton" />
-                <button className="btn-ai" onClick={handleAiAutoFill} disabled={isAiLoading || !newCrop.name_en}>
-                  {isAiLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                </button>
+            <div className="form-row" style={{ display: 'flex', gap: '15px', marginTop: '1rem' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>English Name</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input type="text" value={newCrop.name_en} onChange={e => setNewCrop({...newCrop, name_en: e.target.value})} placeholder="e.g. Cotton" />
+                  <button className="btn-ai" onClick={handleAiAutoFill} disabled={isAiLoading || !newCrop.name_en}>
+                    {isAiLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div className="form-group" style={{ width: '80px' }}>
+                <label>Emoji</label>
+                <input type="text" value={newCrop.emoji} onChange={e => setNewCrop({...newCrop, emoji: e.target.value})} placeholder="🌱" style={{ textAlign: 'center' }} />
               </div>
             </div>
 
             <div className="form-group">
               <label>ಕನ್ನಡ ಹೆಸರು</label>
-              <input type="text" value={newCrop.name_kn} onChange={e => setNewCrop({...newCrop, name_kn: e.target.value})} />
+              <input type="text" value={newCrop.name_kn} onChange={e => setNewCrop({...newCrop, name_kn: e.target.value})} placeholder="ಉದಾ: ಹತ್ತಿ" />
+            </div>
+
+            <div className="threshold-section" style={{ marginTop: '1rem' }}>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>Optimal Growth Targets</h4>
+              <div className="thresholds-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div className="form-group">
+                  <label>Moisture (%)</label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <input type="number" value={newCrop.thresholds.soilMoisture.optimal_min} onChange={e => setNewCrop({...newCrop, thresholds: {...newCrop.thresholds, soilMoisture: {...newCrop.thresholds.soilMoisture, optimal_min: Number(e.target.value)}}})} placeholder="Min" />
+                    <input type="number" value={newCrop.thresholds.soilMoisture.optimal_max} onChange={e => setNewCrop({...newCrop, thresholds: {...newCrop.thresholds, soilMoisture: {...newCrop.thresholds.soilMoisture, optimal_max: Number(e.target.value)}}})} placeholder="Max" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Temperature (°C)</label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <input type="number" value={newCrop.thresholds.temperature.optimal_min} onChange={e => setNewCrop({...newCrop, thresholds: {...newCrop.thresholds, temperature: {...newCrop.thresholds.temperature, optimal_min: Number(e.target.value)}}})} placeholder="Min" />
+                    <input type="number" value={newCrop.thresholds.temperature.optimal_max} onChange={e => setNewCrop({...newCrop, thresholds: {...newCrop.thresholds, temperature: {...newCrop.thresholds.temperature, optimal_max: Number(e.target.value)}}})} placeholder="Max" />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
@@ -276,21 +347,34 @@ const CropManager = () => {
 
       {locationMode && (
         <div className="modal-overlay">
-          <div className="glass-card modal-content" style={{ maxWidth: '400px' }}>
+          <div className="glass-card modal-content" style={{ maxWidth: '400px', width: '90%' }}>
             <h3>{lang === 'kn' ? 'ಸ್ಥಳ ಆಯ್ಕೆಮಾಡಿ' : 'Set Field Location'}</h3>
             <div className="modal-actions" style={{ flexDirection: 'column', gap: '10px', marginTop: '1rem' }}>
-              <button className="btn-primary" onClick={requestGPSLocation}><Navigation size={18} /> {lang === 'kn' ? 'GPS ಬಳಸಿ' : 'Use GPS'}</button>
-              <button className="btn-secondary" onClick={() => setLocationMode('manual')}><Search size={18} /> {lang === 'kn' ? 'ಹುಡುಕಿ' : 'Search'}</button>
+              <button className="btn-primary" onClick={requestGPSLocation} disabled={isProcessing}>
+                {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <Navigation size={18} />} 
+                {lang === 'kn' ? 'GPS ಬಳಸಿ' : 'Use GPS'}
+              </button>
+              <button className="btn-secondary" onClick={() => setLocationMode('manual')} disabled={isProcessing}>
+                <Search size={18} /> {lang === 'kn' ? 'ಹುಡುಕಿ' : 'Search'}
+              </button>
             </div>
             {locationMode === 'manual' && (
               <div style={{ marginTop: '1rem' }}>
-                <input type="text" value={locationQuery} onChange={e => setLocationQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchManualLocation()} placeholder="Search city..." />
-                <div className="search-results">
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input type="text" value={locationQuery} onChange={e => setLocationQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchManualLocation()} placeholder="Search city..." />
+                  <button className="btn-primary" onClick={searchManualLocation} disabled={isProcessing}>
+                    {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
+                  </button>
+                </div>
+                <div className="search-results" style={{ marginTop: '10px', maxHeight: '150px', overflowY: 'auto' }}>
                   {searchResults.map((res, i) => (
                     <div key={i} className="search-item" onClick={() => confirmSetActiveCrop({ name: res.display_name, lat: res.lat, lon: res.lon })}>{res.display_name}</div>
                   ))}
                 </div>
               </div>
+            )}
+            {!isProcessing && (
+               <button className="btn-close" onClick={() => { setLocationMode(null); setPendingCrop(null); }} style={{ top: '10px', right: '10px' }}><X size={18} /></button>
             )}
           </div>
         </div>

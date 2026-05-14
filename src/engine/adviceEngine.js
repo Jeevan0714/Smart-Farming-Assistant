@@ -10,7 +10,7 @@ export function getCurrentStage(crop, plantingDate) {
   
   const start = new Date(plantingDate);
   const now = new Date();
-  const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
   
   let accumulatedDays = 0;
   for (const phase of crop.lifecycle) {
