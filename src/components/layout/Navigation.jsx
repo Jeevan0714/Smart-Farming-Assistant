@@ -14,9 +14,9 @@ const Navigation = () => {
 
   return (
     <nav className="app-navigation">
-      <div className="nav-brand">
-        <span className="brand-emoji">🚜</span>
-        <span className="brand-text">SFA</span>
+      <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <img src="/logo.png" alt="Smart Farming Assistant Logo" style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover' }} />
+        <span className="brand-text" style={{ fontSize: '1.2rem', fontWeight: '800', letterSpacing: '0.5px' }}>SFA</span>
       </div>
       <div className="nav-links">
         {navItems.map((item) => (
