@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component {
           >
             Return to Dashboard
           </button>
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.DEV && (
             <pre style={{ 
               marginTop: '2rem', 
               textAlign: 'left', 

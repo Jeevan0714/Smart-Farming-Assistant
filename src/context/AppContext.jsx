@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-hooks/set-state-in-effect */
 import { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { auth, googleProvider, signInWithPopup, signOut, db } from '../firebase';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
@@ -29,10 +31,12 @@ export const AppProvider = ({ children }) => {
   const [humidity, setHumidity] = useState(null);
   const [windSpeed, setWindSpeed] = useState(null);
   const [locationName, setLocationName] = useState('');
+  const [detectedCoords, setDetectedCoords] = useState(null); // { lat, lon }
   
   // Results & Speech State
   const [advice, setAdvice] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voices, setVoices] = useState([]);
 
   // Derived Alerts
   const ruleAlerts = useMemo(() => {
@@ -203,9 +207,61 @@ export const AppProvider = ({ children }) => {
     setIsSpeaking(false);
   };
 
-  const fetchWeather = (silent = false, manualLat = null, manualLon = null) => {
+  const detectLocation = async (silent = false) => {
+    return new Promise((resolve) => {
+      const fetchLocationByIP = async () => {
+        try {
+          const res = await fetch('https://ipapi.co/json/');
+          const data = await res.json();
+          if (data.latitude && data.longitude) {
+            console.log("Location fetched via IP:", data.city);
+            const locationData = {
+              lat: data.latitude,
+              lon: data.longitude,
+              name: `${data.city}, ${data.region}`
+            };
+            setDetectedCoords({ lat: locationData.lat, lon: locationData.lon });
+            resolve(locationData);
+          } else {
+            throw new Error("IP location data incomplete");
+          }
+        } catch (err) {
+          console.error("IP Location fallback failed", err);
+          if (!silent) alert(lang === 'kn' ? 'ಸ್ಥಳ ಕಂಡುಹಿಡಿಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.' : 'Could not detect location.');
+          resolve(null);
+        }
+      };
+
+      if (!navigator.geolocation) {
+        fetchLocationByIP();
+        return;
+      }
+
+      const geoOptions = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 };
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const locationData = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+            name: null // Will be reverse-geocoded in fetchWeather or used as-is
+          };
+          setDetectedCoords({ lat: locationData.lat, lon: locationData.lon });
+          resolve(locationData);
+        },
+        (err) => {
+          console.warn(`Geolocation Error (${err.code}): ${err.message}`);
+          fetchLocationByIP();
+        },
+        geoOptions
+      );
+    });
+  };
+
+  const fetchWeather = async (silent = false, manualLat = null, manualLon = null) => {
     const fetchWithCoords = async (lat, lon, name = null) => {
       try {
+        setDetectedCoords({ lat, lon });
         const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
         const weatherRes = await fetch(weatherUrl);
         const weatherData = await weatherRes.json();
@@ -213,7 +269,12 @@ export const AppProvider = ({ children }) => {
         if (!name) {
           try {
             const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14`;
-            const geoRes = await fetch(geoUrl, { headers: { 'Accept-Language': lang } });
+            const geoRes = await fetch(geoUrl, { 
+              headers: { 
+                'User-Agent': 'SmartFarmingAssistant/1.0 (contact: smartfarmingdbit@gmail.com)',
+                'Accept-Language': lang 
+              } 
+            });
             const geoData = await geoRes.json();
             const addr = geoData.address || {};
             const localArea = addr.suburb || addr.neighbourhood || addr.village || addr.town || addr.city_district || geoData.display_name?.split(',')[0];
@@ -248,26 +309,14 @@ export const AppProvider = ({ children }) => {
     };
 
     if (manualLat !== null && manualLon !== null) {
-      fetchWithCoords(manualLat, manualLon);
+      await fetchWithCoords(manualLat, manualLon);
       return;
     }
 
-    if (!navigator.geolocation) {
-      if (!silent) alert(lang === 'kn' ? 'ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಜಿಯೋಲೋಕೇಶನ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.' : 'Geolocation is not supported by your browser.');
-      return;
+    const location = await detectLocation(silent);
+    if (location) {
+      await fetchWithCoords(location.lat, location.lon, location.name);
     }
-
-    const geoOptions = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 };
-    const geoError = (err) => {
-      console.warn(`Geolocation Error (${err.code}): ${err.message}`);
-      if (!silent) alert(lang === 'kn' ? 'ಸ್ಥಳ ಪ್ರವೇಶವನ್ನು ನಿರಾಕರಿಸಲಾಗಿದೆ ಅಥವಾ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಅನುಮತಿ ನೀಡಿ.' : 'Location access denied or unavailable. Please enable permissions.');
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => fetchWithCoords(position.coords.latitude, position.coords.longitude),
-      geoError,
-      geoOptions
-    );
   };
 
   useEffect(() => {
@@ -302,26 +351,67 @@ export const AppProvider = ({ children }) => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeCrop?.id, farmLocation?.lat]);
+  }, [user, activeCrop?.id, activeCrop?.location?.lat, activeCrop?.location?.lon, farmLocation?.lat, farmLocation?.lon]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if ('speechSynthesis' in window) {
+      const loadVoices = () => {
+        setVoices(window.speechSynthesis.getVoices());
+      };
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      loadVoices();
+    }
+  }, []);
+
+  useEffect(() => {
     stopSpeaking();
   }, [lang]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAdvice('');
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     stopSpeaking();
   }, [weather, soilMoisture, soilNutrients, temperature, activeCrop]);
+
+  const compressImage = (base64Str, maxWidth = 1024, maxHeight = 1024) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => {
+        resolve(base64Str);
+      };
+    });
+  };
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result);
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result);
+        setSelectedImage(compressed);
         setAiResult('');
       };
       reader.readAsDataURL(file);
@@ -362,7 +452,14 @@ Always format your response exactly like this using these headers:
 
   const startVoiceAssistant = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) {
+      const errorMsg = lang === 'kn' 
+        ? "ನಿಮ್ಮ ಬ್ರೌಸರ್ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಯನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ದಯವಿಟ್ಟು ಗೂಗಲ್ ಕ್ರೋಮ್ ಬಳಸಿ." 
+        : "Speech recognition is not supported in your browser. Please try Google Chrome.";
+      setAiResult(errorMsg);
+      alert(errorMsg);
+      return;
+    }
     
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
@@ -455,7 +552,6 @@ Always format your response exactly like this using these headers:
       const speechLang = lang === 'kn' ? 'kn-IN' : 'en-US';
       const utterance = new SpeechSynthesisUtterance(advice);
       utterance.lang = speechLang;
-      const voices = window.speechSynthesis.getVoices();
       let voice = speechLang === 'kn-IN' ? voices.find(v => v.lang.toLowerCase().startsWith('kn')) : null;
       if (!voice) voice = voices.find(v => v.lang.startsWith('en-US')) || voices[0];
       if (voice) utterance.voice = voice;
@@ -472,7 +568,7 @@ Always format your response exactly like this using these headers:
     soilMoisture, setSoilMoisture, soilNutrients, setSoilNutrients,
     temperature, setTemperature, weather, setWeather,
     humidity, setHumidity, windSpeed, setWindSpeed,
-    locationName, setLocationName,
+    locationName, setLocationName, detectedCoords,
     advice, setAdvice, ruleAlerts,
     isSpeaking, setIsSpeaking,
     selectedImage, setSelectedImage, isAnalyzing, setIsAnalyzing,
@@ -483,7 +579,7 @@ Always format your response exactly like this using these headers:
     stopSpeaking, handleImageUpload, analyzeLeaf, fetchWeather,
     startVoiceAssistant, handleGoogleLogin, handleLogout,
     generateAdvice, handleSpeak, loadUserData,
-    farmLocation, setFarmLocation
+    farmLocation, setFarmLocation, detectLocation
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

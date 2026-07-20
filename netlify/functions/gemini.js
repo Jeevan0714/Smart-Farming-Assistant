@@ -41,7 +41,8 @@ export const handler = async (event) => {
         let data;
         try {
           data = JSON.parse(text);
-        } catch (e) {
+        } catch (parseError) {
+          console.error("Failed to parse Google API response JSON:", parseError);
           data = { error: { message: `Invalid JSON from Google API: ${text.substring(0, 100)}` } };
         }
         

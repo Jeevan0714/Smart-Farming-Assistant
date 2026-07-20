@@ -47,7 +47,7 @@ export async function callGeminiAPI(prompt, imageData = null) {
     try {
       data = JSON.parse(text);
     } catch (parseError) {
-      console.error("Malformed server response:", text);
+      console.error("Malformed server response:", parseError, text);
       return `Connection error: Server returned an invalid response (Status ${response.status}).`;
     }
 
@@ -96,19 +96,28 @@ export async function generateCropProfile(cropName, lang) {
         "temperature": { "low": 15, "optimal_min": 22, "optimal_max": 30, "high": 38 }
       }
     }
-    Base the thresholds on scientific data for this specific plant. Ensure the Kannada name is accurate.
+    Base the thresholds on scientific data for this specific plant. Ensure the Kannada name is accurate (the user's preferred language context is ${lang}).
   `;
 
   const result = await callGeminiAPI(prompt);
+  
+  if (!result || typeof result !== 'string' || result.startsWith('AI Error') || result.startsWith('Connection')) {
+    console.error("AI Generation Error or Invalid Result:", result);
+    return null;
+  }
+
   try {
-    const jsonStr = result.includes('```json') 
-      ? result.split('```json')[1].split('```')[0] 
-      : result.includes('```') 
-        ? result.split('```')[1].split('```')[0]
-        : result;
+    const startIdx = result.indexOf('{');
+    const endIdx = result.lastIndexOf('}');
+    
+    if (startIdx === -1 || endIdx === -1) {
+      throw new Error("No JSON object found in AI response");
+    }
+    
+    const jsonStr = result.substring(startIdx, endIdx + 1);
     return JSON.parse(jsonStr);
   } catch (e) {
-    console.error("Failed to parse AI crop profile:", result);
+    console.error("Failed to parse AI crop profile. Error:", e.message, "Full result:", result);
     return null;
   }
 }

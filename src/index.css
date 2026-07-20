@@ -1356,3 +1356,147 @@ footer a {
   color: var(--primary);
   text-decoration: none;
 }
+
+/* Structured Leaf Diagnosis Styling */
+.diagnosis-result-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.result-main-card {
+  border-left: 4px solid var(--primary);
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.01));
+}
+
+.result-main-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.result-main-header .main-icon {
+  font-size: 2.5rem;
+  background: rgba(16, 185, 129, 0.1);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+}
+
+.result-main-header .title-area {
+  flex: 1;
+  min-width: 200px;
+}
+
+.result-main-header .title-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.result-main-header .title-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+}
+
+.danger-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.danger-badge.high {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: var(--danger);
+  color: #f87171;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.danger-badge.medium {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--secondary);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+
+.danger-badge.low {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--primary);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.diagnosis-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .diagnosis-details-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.details-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.details-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 10px;
+}
+
+.details-card-header .card-icon {
+  font-size: 1.25rem;
+}
+
+.details-card-header h4 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #a7f3d0;
+}
+
+.details-card-content {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.today-card {
+  border-top: 3px solid #60a5fa; /* Blue accent */
+  background: linear-gradient(to bottom, rgba(96, 165, 250, 0.03), transparent);
+}
+
+.treatment-card {
+  border-top: 3px solid #fb7185; /* Coral accent */
+  background: linear-gradient(to bottom, rgba(251, 113, 133, 0.03), transparent);
+}
+
+.prevention-card {
+  border-top: 3px solid #34d399; /* Emerald accent */
+  background: linear-gradient(to bottom, rgba(52, 211, 153, 0.03), transparent);
+}
