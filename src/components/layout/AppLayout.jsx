@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import Navigation from './Navigation';
 import { useAppContext } from '../../context/AppContext';
@@ -5,6 +6,16 @@ import { useAppContext } from '../../context/AppContext';
 const AppLayout = () => {
   const { user, lang, setLang, t, handleLogout } = useAppContext();
   const location = useLocation();
+
+  useEffect(() => {
+    const path = location.pathname;
+    let pageTitle = 'Smart Farming Assistant - AI Agriculture Advisor';
+    if (path === '/dashboard') pageTitle = 'Live Telemetry & Dashboard | Smart Farming Assistant';
+    if (path === '/crops') pageTitle = 'Crop Growth Profiles & FAO-56 Advisor | Smart Farming Assistant';
+    if (path === '/diagnosis') pageTitle = 'AI Plant Leaf Disease Diagnosis | Smart Farming Assistant';
+    if (path === '/assistant') pageTitle = 'Voice AI Agricultural Assistant | Smart Farming Assistant';
+    document.title = pageTitle;
+  }, [location.pathname]);
 
   if (!user) {
     return <Navigate to="/login" replace />;

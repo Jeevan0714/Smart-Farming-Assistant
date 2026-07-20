@@ -4,59 +4,113 @@ import { useAppContext } from '../context/AppContext';
 const Diagnosis = () => {
   const {
     t, lang, handleImageUpload, selectedImage, analyzeLeaf,
-    isAnalyzing, aiResult, aiRef
+    isAnalyzing, diagnosisResult, aiRef
   } = useAppContext();
 
   // Smoothly scroll to AI Result
   useEffect(() => {
-    if (aiResult && aiRef.current) {
+    if (diagnosisResult && aiRef.current) {
       aiRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [aiResult, aiRef]);
+  }, [diagnosisResult, aiRef]);
 
-  // Helper to parse the structured AI response
+  // Helper to parse structured AI response (supports JSON & freeform text)
   const parseDiagnosisResult = (text) => {
     if (!text) return null;
 
-    const patterns = {
-      problem: /(?:🌿\s*Crop\s*&\s*Problem:\s*|ಬೆಳೆ\s*ಮತ್ತು\s*ಸಮಸ್ಯೆ:\s*)(.*)/i,
-      danger: /(?:⚠️\s*Danger\s*Level:\s*|ಅಪಾಯದ\s*ಮಟ್ಟ:\s*)(.*)/i,
-      today: /(?:🛠️\s*What\s*to\s*do\s*today:\s*|ಇಂದಿನ\s*ಕ್ರಮಗಳು:\s*)(.*)/i,
-      treatment: /(?:💊\s*Treatment\s*Plan:\s*|ಚಿಕಿತ್ಸಾ\s*ಯೋಜನೆ:\s*)(.*)/i,
-      prevention: /(?:🛡️\s*Prevention:\s*|ತಡೆಗಟ್ಟುವಿಕೆ:\s*)(.*)/i
+    const formatOutput = (prob, dang, tod, treat, prev) => {
+      let dangerVal = (dang || 'Medium').trim();
+      if (dangerVal.toLowerCase().includes('high') || dangerVal.toLowerCase().includes('ಉನ್ನತ')) dangerVal = 'High';
+      else if (dangerVal.toLowerCase().includes('low') || dangerVal.toLowerCase().includes('ಕಡಿಮೆ')) dangerVal = 'Low';
+      else dangerVal = 'Medium';
+
+      return {
+        problem: prob || 'Crop Leaf Analysis',
+        danger: dangerVal,
+        today: tod || '',
+        treatment: treat || '',
+        prevention: prev || '',
+        isParsed: true
+      };
     };
 
-    const lines = text.split('\n');
-    const result = {
-      problem: '',
-      danger: '',
-      today: '',
-      treatment: '',
-      prevention: '',
-      isParsed: false
-    };
-
-    let matchedCount = 0;
-    for (const line of lines) {
-      for (const [key, regex] of Object.entries(patterns)) {
-        const match = line.match(regex);
-        if (match && match[1]) {
-          result[key] = match[1].trim();
-          matchedCount++;
-          break;
+    // 1. Try JSON Parsing first
+    try {
+      const startIdx = text.indexOf('{');
+      const endIdx = text.lastIndexOf('}');
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        const jsonStr = text.substring(startIdx, endIdx + 1);
+        const obj = JSON.parse(jsonStr);
+        if (obj.problem || obj.today || obj.treatment || obj.prevention) {
+          return formatOutput(obj.problem, obj.danger, obj.today, obj.treatment, obj.prevention);
         }
       }
+    } catch (e) {
+      console.warn("JSON diagnosis parse fallback:", e);
     }
 
-    if (matchedCount >= 3) {
-      result.isParsed = true;
-      return result;
+    // 2. Key-Value Extractor for Pseudo-JSON / Backtick pairs (`key`: "value")
+    const normalized = text.replace(/`([^`]+)`\s*:\s*"([^"]+)"/g, '"$1": "$2"');
+    const extractKey = (keyName) => {
+      const regex = new RegExp(`"${keyName}"\\s*:\\s*"([^"]+)"`, 'i');
+      const match = normalized.match(regex);
+      return match ? match[1].trim() : '';
+    };
+
+    const probKey = extractKey('problem');
+    const dangKey = extractKey('danger');
+    const todKey = extractKey('today');
+    const treatKey = extractKey('treatment');
+    const prevKey = extractKey('prevention');
+
+    if (probKey || todKey || treatKey || prevKey) {
+      return formatOutput(probKey, dangKey, todKey, treatKey, prevKey);
+    }
+
+    // 3. Ultra-flexible Regex Parsing for freeform text (stripping markdown asterisks)
+    const cleanText = text.replace(/[*#]/g, '').trim();
+
+    const patterns = {
+      crop: /(?:Crop|Plant|ಬೆಳೆ)\s*:\s*([^\n]+)/i,
+      disease: /(?:Problem|Disease|Pest|ಸಮಸ್ಯೆ|ರೋಗ)\s*:\s*([^\n]+)/i,
+      danger: /(?:Danger\s*(?:Level)?|ಅಪಾಯದ\s*ಮಟ್ಟ)\s*:\s*([^\n]+)/i,
+      today: /(?:What\s*to\s*do\s*today|Immediate\s*Action|ಇಂದಿನ\s*ಕ್ರಮಗಳು|ಇವತ್ತಿನ\s*ತಕ್ಷಣದ\s*ಕ್ರಮಗಳು)\s*:\s*([\s\S]*?)(?=(?:Treatment|Prevention|ಚಿಕಿತ್ಸೆ|ತಡೆಗಟ್ಟುವಿಕೆ)|$)/i,
+      treatment: /(?:Treatment\s*(?:Plan)?|ಚಿಕಿತ್ಸಾ\s*ಯೋಜನೆ|ಚಿಕಿತ್ಸೆ)\s*:\s*([\s\S]*?)(?=(?:Prevention|ತಡೆಗಟ್ಟುವಿಕೆ)|$)/i,
+      prevention: /(?:Prevention|ತಡೆಗಟ್ಟುವಿಕೆ|ಮುನ್ನೆಚ್ಚರಿಕೆ)\s*:\s*([\s\S]*?)$/i
+    };
+
+    const cropMatch = cleanText.match(patterns.crop);
+    const diseaseMatch = cleanText.match(patterns.disease);
+    const dangerMatch = cleanText.match(patterns.danger);
+    const todayMatch = cleanText.match(patterns.today);
+    const treatmentMatch = cleanText.match(patterns.treatment);
+    const preventionMatch = cleanText.match(patterns.prevention);
+
+    let problemStr = '';
+    if (cropMatch && diseaseMatch) {
+      problemStr = `${cropMatch[1].trim()} - ${diseaseMatch[1].trim()}`;
+    } else if (diseaseMatch) {
+      problemStr = diseaseMatch[1].trim();
+    } else if (cropMatch) {
+      problemStr = cropMatch[1].trim();
+    }
+
+    const res = formatOutput(
+      problemStr,
+      dangerMatch ? dangerMatch[1].trim() : 'Medium',
+      todayMatch ? todayMatch[1].trim() : '',
+      treatmentMatch ? treatmentMatch[1].trim() : '',
+      preventionMatch ? preventionMatch[1].trim() : ''
+    );
+
+    if (res.today || res.treatment || res.prevention) {
+      return res;
     }
 
     return null;
   };
 
-  const parsedData = parseDiagnosisResult(aiResult);
+  const parsedData = parseDiagnosisResult(diagnosisResult);
 
   return (
     <div className="diagnosis-page">
@@ -93,7 +147,7 @@ const Diagnosis = () => {
       </section>
 
       {/* AI Result Display */}
-      {aiResult && (
+      {diagnosisResult && (
         <div ref={aiRef} className="diagnosis-result-container" style={{ marginTop: '2rem' }}>
           {parsedData && parsedData.isParsed ? (
             <div className="parsed-diagnosis-results">
@@ -122,7 +176,7 @@ const Diagnosis = () => {
                     <span className="card-icon">🛠️</span>
                     <h4>{lang === 'kn' ? 'ಇಂದಿನ ತಕ್ಷಣದ ಕ್ರಮಗಳು' : 'What to do today'}</h4>
                   </div>
-                  <p className="details-card-content">{parsedData.today}</p>
+                  <p className="details-card-content" style={{ whiteSpace: 'pre-wrap' }}>{parsedData.today}</p>
                 </div>
 
                 <div className="glass-card details-card treatment-card">
@@ -130,7 +184,7 @@ const Diagnosis = () => {
                     <span className="card-icon">💊</span>
                     <h4>{lang === 'kn' ? 'ಚಿಕಿತ್ಸಾ ಯೋಜನೆ' : 'Treatment Plan'}</h4>
                   </div>
-                  <p className="details-card-content">{parsedData.treatment}</p>
+                  <p className="details-card-content" style={{ whiteSpace: 'pre-wrap' }}>{parsedData.treatment}</p>
                 </div>
 
                 <div className="glass-card details-card prevention-card">
@@ -138,7 +192,7 @@ const Diagnosis = () => {
                     <span className="card-icon">🛡️</span>
                     <h4>{lang === 'kn' ? 'ತಡೆಗಟ್ಟುವಿಕೆ ಕ್ರಮ' : 'Prevention'}</h4>
                   </div>
-                  <p className="details-card-content">{parsedData.prevention}</p>
+                  <p className="details-card-content" style={{ whiteSpace: 'pre-wrap' }}>{parsedData.prevention}</p>
                 </div>
               </div>
             </div>
@@ -148,7 +202,7 @@ const Diagnosis = () => {
                 <span>🤖</span>
                 <span>{t["ai-header"]}</span>
               </div>
-              <p className="advice-content" style={{ whiteSpace: 'pre-wrap' }}>{aiResult}</p>
+              <p className="advice-content" style={{ whiteSpace: 'pre-wrap' }}>{diagnosisResult}</p>
             </div>
           )}
         </div>

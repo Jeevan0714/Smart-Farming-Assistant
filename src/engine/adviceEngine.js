@@ -6,7 +6,7 @@
  * Calculates the current growth stage based on planting date and lifecycle data
  */
 export function getCurrentStage(crop, plantingDate) {
-  if (!crop || !crop.lifecycle || !plantingDate) return null;
+  if (!crop || !Array.isArray(crop.lifecycle) || crop.lifecycle.length === 0 || !plantingDate) return null;
   
   const start = new Date(plantingDate);
   const now = new Date();
@@ -14,7 +14,7 @@ export function getCurrentStage(crop, plantingDate) {
   
   let accumulatedDays = 0;
   for (const phase of crop.lifecycle) {
-    accumulatedDays += phase.days;
+    accumulatedDays += Number(phase.days) || 0;
     if (diffDays <= accumulatedDays) {
       return { ...phase, daysPassed: diffDays };
     }
@@ -30,10 +30,14 @@ export function generateRuleAdvice(crop, moisture, nutrients, temperature, weath
   const currentStage = getCurrentStage(crop, crop.plantingDate);
   const stageThresholds = currentStage?.thresholds;
   
+  const defaultMoisture = { low: 30, optimal_min: 50, optimal_max: 75, high: 85 };
+  const defaultNutrients = { low: 30, optimal_min: 50, optimal_max: 75, high: 90 };
+  const defaultTemp = { low: 10, optimal_min: 20, optimal_max: 30, high: 40 };
+
   const t = {
-    soilMoisture: stageThresholds?.soilMoisture || crop.thresholds.soilMoisture,
-    nutrients: stageThresholds?.nutrients || crop.thresholds.nutrients,
-    temperature: crop.thresholds.temperature // Temperature usually remains crop-wide
+    soilMoisture: { ...defaultMoisture, ...(stageThresholds?.soilMoisture || crop.thresholds.soilMoisture || {}) },
+    nutrients: { ...defaultNutrients, ...(stageThresholds?.nutrients || crop.thresholds.nutrients || {}) },
+    temperature: { ...defaultTemp, ...(crop.thresholds.temperature || {}) }
   };
 
   const L = lang;

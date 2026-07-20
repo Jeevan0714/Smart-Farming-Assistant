@@ -3,7 +3,7 @@
 /**
  * Common function to call our Netlify Backend for Gemini AI
  */
-export async function callGeminiAPI(prompt, imageData = null) {
+export async function callGeminiAPI(prompt, imageData = null, tools = null) {
   const contents = [{
     parts: [{ text: prompt }]
   }];
@@ -21,6 +21,7 @@ export async function callGeminiAPI(prompt, imageData = null) {
 
   const payload = {
     contents,
+    ...(tools ? { tools } : {}),
     safetySettings: [
       { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
       { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -77,18 +78,25 @@ import { getCurrentStage } from './adviceEngine';
 /**
  * AI function to generate a scientific crop profile for new plants
  */
-export async function generateCropProfile(cropName, lang) {
+export async function generateCropProfile(cropName, variety = '', soilType = '', lang = 'en') {
+  const varietyContext = variety ? `Variety/Cultivar: "${variety}". ` : '';
+  const soilContext = soilType ? `Soil Type: "${soilType}". ` : '';
+
   const prompt = `
-    You are a professional agricultural scientist. Create a detailed growth profile for the plant: "${cropName}".
+    You are a senior agricultural scientist at FAO and ICAR. Create a scientifically accurate crop growth profile for: "${cropName}".
+    ${varietyContext}${soilContext}
     Return the response ONLY as a clean JSON object with this exact structure:
     {
       "name_en": "Common English Name",
       "name_kn": "Common Kannada Name",
-      "emoji": "🌱",
+      "emoji": "🍎",
+      "variety": "${variety || 'Standard'}",
+      "soilType": "${soilType || 'Loam'}",
       "lifecycle": [
-        { "stage": "Seedling", "days": 20, "thresholds": { "soilMoisture": { "low": 40, "optimal_min": 55, "optimal_max": 70, "high": 85 }, "nutrients": { "low": 30, "optimal_min": 50 } } },
-        { "stage": "Vegetative", "days": 35, "thresholds": { "soilMoisture": { "low": 50, "optimal_min": 65, "optimal_max": 80, "high": 90 }, "nutrients": { "low": 45, "optimal_min": 65 } } },
-        { "stage": "Flowering/Fruiting", "days": 30, "thresholds": { "soilMoisture": { "low": 55, "optimal_min": 70, "optimal_max": 85, "high": 95 }, "nutrients": { "low": 50, "optimal_min": 75 } } }
+        { "stage": "Bud Break / Germination", "days": 20, "thresholds": { "soilMoisture": { "low": 40, "optimal_min": 55, "optimal_max": 70, "high": 85 }, "nutrients": { "low": 30, "optimal_min": 50 } } },
+        { "stage": "Vegetative / Leafing", "days": 35, "thresholds": { "soilMoisture": { "low": 50, "optimal_min": 65, "optimal_max": 80, "high": 90 }, "nutrients": { "low": 45, "optimal_min": 65 } } },
+        { "stage": "Flowering & Pollination", "days": 25, "thresholds": { "soilMoisture": { "low": 55, "optimal_min": 70, "optimal_max": 85, "high": 95 }, "nutrients": { "low": 50, "optimal_min": 75 } } },
+        { "stage": "Fruit Development & Ripening", "days": 60, "thresholds": { "soilMoisture": { "low": 50, "optimal_min": 60, "optimal_max": 75, "high": 85 }, "nutrients": { "low": 40, "optimal_min": 60 } } }
       ],
       "thresholds": {
         "soilMoisture": { "low": 40, "optimal_min": 60, "optimal_max": 80, "high": 90 },
@@ -96,11 +104,22 @@ export async function generateCropProfile(cropName, lang) {
         "temperature": { "low": 15, "optimal_min": 22, "optimal_max": 30, "high": 38 }
       }
     }
-    Base the thresholds on scientific data for this specific plant. Ensure the Kannada name is accurate (the user's preferred language context is ${lang}).
+
+    IMPORTANT ACCURACY RULES (FAO-56 & ICAR GROUNDING):
+    1. Base stage days strictly on active growing days until harvest for "${cropName}" (${variety || 'standard variety'}), excluding winter dormancy.
+    2. Adjust optimal moisture and temperature ranges according to ${soilType || 'loamy'} soil water holding capacity.
+    3. Include 3 to 5 realistic growth stages matching FAO-56 crop coefficient stages.
+    4. Ensure the Kannada name is accurate (user language: ${lang}).
   `;
 
-  const result = await callGeminiAPI(prompt);
+  let result = await callGeminiAPI(prompt, null, [{ googleSearch: {} }]);
   
+  // If Search Grounding encounters quota limits (429) or tool restriction, retry with standard generation
+  if (!result || typeof result !== 'string' || result.startsWith('AI Error') || result.startsWith('Connection') || result.includes('quota') || result.includes('RESOURCE_EXHAUSTED')) {
+    console.warn("Search Grounding rate limited or unavailable, retrying standard generation...");
+    result = await callGeminiAPI(prompt);
+  }
+
   if (!result || typeof result !== 'string' || result.startsWith('AI Error') || result.startsWith('Connection')) {
     console.error("AI Generation Error or Invalid Result:", result);
     return null;

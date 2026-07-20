@@ -20,20 +20,48 @@ export const handler = async (event) => {
   }
 
   try {
-    const { contents, safetySettings } = JSON.parse(event.body);
+    if (!event.body) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: { message: "Empty request body received." } })
+      };
+    }
 
-    const payload = {
-      contents,
-      safetySettings
-    };
+    let contents = [];
+    let safetySettings = [];
+    let tools = null;
 
-    const makeRequest = async (apiVersion, modelName) => {
+    try {
+      const parsedBody = JSON.parse(event.body);
+      contents = parsedBody.contents || [];
+      safetySettings = parsedBody.safetySettings || [];
+      tools = parsedBody.tools || null;
+    } catch {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: { message: "Invalid JSON request payload." } })
+      };
+    }
+
+    if (!Array.isArray(contents) || contents.length === 0) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: { message: "No contents provided for AI generation." } })
+      };
+    }
+
+    const makeRequest = async (apiVersion, modelName, includeTools = true) => {
+      const currentPayload = {
+        contents,
+        safetySettings,
+        ...(includeTools && tools ? { tools } : {})
+      };
       const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${API_KEY}`;
       try {
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(currentPayload)
         });
         
         // Handle empty or non-JSON responses
@@ -51,39 +79,31 @@ export const handler = async (event) => {
         return { response: { ok: false, status: 500 }, data: { error: { message: e.message } } };
       }
     };
-
-    // Determine if request has image data
-    const imageData = contents[0].parts.some(p => p.inline_data);
     
-    // Tiered Fallback Sequence (Updated for May 2026: Prioritizing Cost-Efficient & Latest Models)
+    // Tiered Fallback Sequence with active Gemini & Gemma redundancy
     const attempts = [
-      // 1. Ultra-low cost / High Volume (Best for credits)
-      { ver: 'v1', model: 'gemini-1.5-flash-8b' },
-      { ver: 'v1', model: 'gemini-1.5-flash' },
-
-      // 2. Latest Generation (May 2026) - Optimized "Lite" variants
-      { ver: 'v1', model: 'gemini-3.1-flash-lite' },
-      { ver: 'v1', model: 'gemini-2.5-flash-lite' },
-
-      // 3. Latest Generation (May 2026) - Standard Flash
-      { ver: 'v1', model: 'gemini-3.1-flash' },
-      { ver: 'v1', model: 'gemini-2.5-flash' },
-
-      // 4. Stable Fallbacks (if newer ones are overloaded)
-      { ver: 'v1beta', model: 'gemini-3.1-flash' },
-      { ver: 'v1beta', model: 'gemini-2.5-flash' }
+      { ver: 'v1beta', model: 'gemini-flash-latest' },
+      { ver: 'v1beta', model: 'gemini-2.0-flash' },
+      { ver: 'v1beta', model: 'gemini-2.0-flash-lite' },
+      { ver: 'v1beta', model: 'gemini-pro-latest' },
+      { ver: 'v1beta', model: 'gemma-4-26b-a4b-it' },
+      { ver: 'v1beta', model: 'gemma-4-31b-it' },
+      { ver: 'v1', model: 'gemini-2.0-flash' },
+      { ver: 'v1', model: 'gemini-flash-latest' }
     ];
-
-    // Pro models are expensive; only use if Flash fails or for complex reasoning (non-image)
-    if (!imageData) {
-      attempts.push({ ver: 'v1', model: 'gemini-2.5-pro' });
-      attempts.push({ ver: 'v1', model: 'gemini-3.1-pro' });
-    }
 
     let lastError = null;
 
     for (const attempt of attempts) {
-      const { response, data } = await makeRequest(attempt.ver, attempt.model);
+      let { response, data } = await makeRequest(attempt.ver, attempt.model, true);
+      
+      // If tool grounding failed due to unsupported parameters or rate limits (400/429/404), retry without tools
+      if (!response.ok && tools && (response.status === 400 || response.status === 429 || response.status === 404)) {
+        console.warn(`Tool grounding rejected for ${attempt.model} (${response.status}), retrying without tools...`);
+        const retryResult = await makeRequest(attempt.ver, attempt.model, false);
+        response = retryResult.response;
+        data = retryResult.data;
+      }
       
       if (response.ok) {
         // Return only the text content or block info back to frontend
@@ -99,8 +119,8 @@ export const handler = async (event) => {
         }
       }
 
-      // If we hit a 404 (model not found), 429 (rate limit), 503 (overloaded), or 500 (internal error),
-      // we log it and try the next model in the list.
+      // If we hit a 400 (bad argument/tools), 404 (model not found), 429 (rate limit), 503 (overloaded), or 500 (internal error),
+      // log it and try the next model in the list.
       if ([400, 404, 429, 500, 503, 504].includes(response.status)) {
         lastError = { status: response.status, model: attempt.model, message: data.error?.message };
         console.warn(`Fallback triggered: ${attempt.model} failed with ${response.status}: ${data.error?.message}`);

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { RefreshCw, AlertTriangle, ClipboardCheck, ShieldCheck } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { BUILT_IN_CROPS } from '../data/cropProfiles';
 
 const Dashboard = () => {
   const {
@@ -8,7 +9,8 @@ const Dashboard = () => {
     humidity, windSpeed, locationName, fetchWeather,
     soilMoisture, setSoilMoisture, soilNutrients, setSoilNutrients,
     weather, setWeather, ruleAlerts, generateAdvice,
-    isFetchingAI, advice, adviceRef, isSpeaking, handleSpeak
+    isFetchingAI, advice, adviceRef, isSpeaking, handleSpeak,
+    fields, activeFieldId, switchField, customCrops
   } = useAppContext();
 
   // Smoothly scroll to the advice panel whenever advice is generated
@@ -18,11 +20,40 @@ const Dashboard = () => {
     }
   }, [advice, adviceRef]);
 
+  if (!fields || fields.length === 0) {
+    return (
+      <div className="dashboard-page empty-dashboard" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6rem 2rem', textAlign: 'center' }}>
+        <div className="empty-emoji" style={{ fontSize: '5rem', marginBottom: '1.5rem', filter: 'drop-shadow(0 0 20px var(--primary-glow))' }}>🚜</div>
+        <h2 className="empty-title" style={{ color: 'white', marginBottom: '1rem', fontSize: '2rem' }}>
+          {lang === 'kn' ? 'ಯಾವುದೇ ಸಕ್ರಿಯ ಕ್ಷೇತ್ರಗಳಿಲ್ಲ' : 'No Active Fields'}
+        </h2>
+        <p className="empty-desc" style={{ color: 'var(--text-secondary)', maxWidth: '500px', marginBottom: '2rem', fontSize: '1.1rem', lineHeight: '1.6' }}>
+          {lang === 'kn' 
+            ? 'ನಿಮ್ಮ ಮೊದಲ ಬೆಳೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು ಬೆಳೆಗಳ ಟ್ಯಾಬ್‌ಗೆ ಭೇಟಿ ನೀಡಿ ಮತ್ತು ಸ್ಥಳವನ್ನು ಆಯ್ಕೆಮಾಡಿ.' 
+            : 'To get started, please go to the Crops tab, select a crop profile, and set up your planting location.'}
+        </p>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button 
+            className="btn-primary" 
+            style={{ padding: '0.8rem 2rem', fontSize: '1rem' }} 
+            onClick={() => {
+              alert(lang === 'kn' 
+                ? 'ದಯವಿಟ್ಟು ಎಡಭಾಗದ ಮೆನುವಿನಿಂದ "Crops" ಟ್ಯಾಬ್ ಆಯ್ಕೆಮಾಡಿ.' 
+                : 'Please select the "Crops" tab from the left sidebar to activate a crop profile.');
+            }}
+          >
+            🌾 {lang === 'kn' ? 'ಬೆಳೆಗಳ ಪುಟಕ್ಕೆ ಹೋಗಿ' : 'Go to Crops Tab'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-page">
       {/* Live Data Dashboard */}
       <section className="glass-card live-dashboard" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
           <h2 className="section-title" style={{ marginBottom: 0 }}>
             📡 {t["section-dashboard"]}
             {activeCrop && (
@@ -31,16 +62,46 @@ const Dashboard = () => {
               </span>
             )}
           </h2>
-          <button 
-            className="btn-secondary" 
-            onClick={() => activeCrop?.location?.lat 
-              ? fetchWeather(false, activeCrop.location.lat, activeCrop.location.lon) 
-              : fetchWeather()
-            }
-            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-          >
-            <RefreshCw size={16} /> {lang === 'kn' ? 'ಡೇಟಾ ನವೀಕರಿಸಿ' : 'Refresh Data'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {fields.length > 0 && (
+              <select
+                value={activeFieldId || ''}
+                onChange={(e) => switchField(e.target.value)}
+                className="field-selector-dropdown"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                {fields.map(f => {
+                  const crop = BUILT_IN_CROPS[f.cropId] || customCrops.find(c => c.id === f.cropId);
+                  return (
+                    <option key={f.id} value={f.id} style={{ background: '#0a1912', color: 'white' }}>
+                      {crop?.emoji || '🌱'} {f.fieldName} ({lang === 'kn' ? (crop?.name_kn || f.cropId) : (crop?.name_en || f.cropId)})
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+            <button 
+              className="btn-secondary" 
+              onClick={() => activeCrop?.location?.lat 
+                ? fetchWeather(false, activeCrop.location.lat, activeCrop.location.lon, activeCrop.location.name) 
+                : fetchWeather()
+              }
+              style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+            >
+              <RefreshCw size={16} /> {lang === 'kn' ? 'ಡೇಟಾ ನವೀಕರಿಸಿ' : 'Refresh Data'}
+            </button>
+          </div>
         </div>
 
         <div className="dashboard-grid">

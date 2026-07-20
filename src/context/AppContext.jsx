@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { auth, googleProvider, signInWithPopup, signOut, db } from '../firebase';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, setDoc, onSnapshot } from 'firebase/firestore';
 import { BUILT_IN_CROPS } from '../data/cropProfiles';
 import { generateRuleAdvice } from '../engine/adviceEngine';
 import { fetchFieldAdvice, callGeminiAPI } from '../engine/geminiAdvisor';
@@ -17,11 +17,61 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // Field & Crop State
-  const [activeCrop, setActiveCrop] = useState(null);
-  const [customCrops, setCustomCrops] = useState([]);
-  const [lang, setLang] = useState('en');
+  // Field & Crop State (Multi-field) with LocalStorage fallback
+  const [fields, setFields] = useState(() => {
+    try {
+      const local = localStorage.getItem('sfa_fields');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeFieldId, setActiveFieldId] = useState(() => {
+    return localStorage.getItem('sfa_activeFieldId') || null;
+  });
+  const [fieldTelemetry, setFieldTelemetry] = useState(() => {
+    try {
+      const local = localStorage.getItem('sfa_fieldTelemetry');
+      return local ? JSON.parse(local) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [customCrops, setCustomCrops] = useState(() => {
+    try {
+      const local = localStorage.getItem('sfa_customCrops');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [lang, setLang] = useState(() => localStorage.getItem('sfa_lang') || 'en');
   const [farmLocation, setFarmLocation] = useState(null); // Global Farm Location: { name, lat, lon }
+
+  const activeField = useMemo(() => {
+    return fields.find(f => f.id === activeFieldId) || fields[0] || null;
+  }, [fields, activeFieldId]);
+
+  const activeCrop = useMemo(() => {
+    if (!activeField) return null;
+    const baseCrop = BUILT_IN_CROPS[activeField.cropId] || customCrops.find(c => c.id === activeField.cropId);
+    if (!baseCrop) return null;
+    return {
+      ...baseCrop,
+      plantingDate: activeField.plantingDate,
+      location: activeField.location,
+      fieldId: activeField.id,
+      fieldName: activeField.fieldName
+    };
+  }, [activeField, customCrops]);
+
+  // Backward-compatible mock setter
+  const setActiveCrop = (val) => {
+    if (val === null) {
+      setActiveFieldId(null);
+    }
+  };
+
   const [soilMoisture, setSoilMoisture] = useState(50);
   const [soilNutrients, setSoilNutrients] = useState(50);
   const [temperature, setTemperature] = useState(25);
@@ -50,6 +100,9 @@ export const AppProvider = ({ children }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState('');
+  const [diagnosisResult, setDiagnosisResult] = useState('');
+  const [assistantResult, setAssistantResult] = useState('');
+  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isFetchingAI, setIsFetchingAI] = useState(false);
@@ -76,6 +129,7 @@ export const AppProvider = ({ children }) => {
 
       const customList = customCropsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
       setCustomCrops(customList);
+      localStorage.setItem('sfa_customCrops', JSON.stringify(customList));
 
       if (userDoc.exists()) {
         const userData = userDoc.data();
@@ -85,18 +139,47 @@ export const AppProvider = ({ children }) => {
           setFarmLocation(userData.farmLocation);
         }
 
+        // Live migration: convert old single-crop config to new fields collection
         if (userData.activeCropId) {
           const cropId = userData.activeCropId;
-          const baseCrop = BUILT_IN_CROPS[cropId] || customList.find(c => c.id === cropId);
-          if (baseCrop) {
-            const fullActive = { ...baseCrop, ...userData.activeFieldInfo };
-            setActiveCrop(fullActive);
-          }
+          const fieldId = `field_migration_${Date.now()}`;
+          const migrationField = {
+            id: fieldId,
+            fieldName: 'Primary Field',
+            cropId: cropId,
+            plantingDate: userData.activeFieldInfo?.plantingDate || new Date().toISOString(),
+            location: userData.activeFieldInfo?.location || { name: 'Dharwad', lat: 15.45, lon: 75.01 },
+            status: 'active'
+          };
+          
+          // Save migration field to Firestore subcollection
+          await setDoc(doc(db, 'users', currentUser.uid, 'fields', fieldId), migrationField);
+          
+          // Clean up root user doc fields and set activeFieldId
+          await setDoc(userDocRef, {
+            activeCropId: null,
+            activeFieldInfo: null,
+            activeFieldId: fieldId
+          }, { merge: true });
+          
+          setActiveFieldId(fieldId);
+          localStorage.setItem('sfa_activeFieldId', fieldId);
+        } else if (userData.activeFieldId) {
+          setActiveFieldId(userData.activeFieldId);
+          localStorage.setItem('sfa_activeFieldId', userData.activeFieldId);
         }
       }
       console.log("Context: User data loaded successfully.");
     } catch (e) {
       console.error("Context: Error loading user data:", e);
+      try {
+        const localCustom = localStorage.getItem('sfa_customCrops');
+        if (localCustom) setCustomCrops(JSON.parse(localCustom));
+        const localActive = localStorage.getItem('sfa_activeFieldId');
+        if (localActive) setActiveFieldId(localActive);
+      } catch (err) {
+        console.error("Failed to load local storage fallbacks:", err);
+      }
     } finally {
       setIsDataLoading(false);
     }
@@ -258,7 +341,7 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  const fetchWeather = async (silent = false, manualLat = null, manualLon = null) => {
+  const fetchWeather = async (silent = false, manualLat = null, manualLon = null, manualName = null) => {
     const fetchWithCoords = async (lat, lon, name = null) => {
       try {
         setDetectedCoords({ lat, lon });
@@ -309,7 +392,7 @@ export const AppProvider = ({ children }) => {
     };
 
     if (manualLat !== null && manualLon !== null) {
-      await fetchWithCoords(manualLat, manualLon);
+      await fetchWithCoords(manualLat, manualLon, manualName);
       return;
     }
 
@@ -332,7 +415,8 @@ export const AppProvider = ({ children }) => {
         loadUserData(userObj); // Trigger global load on login
       } else {
         setUser(null);
-        setActiveCrop(null);
+        setActiveFieldId(null);
+        setFields([]);
         setCustomCrops([]);
         setFarmLocation(null);
       }
@@ -340,10 +424,68 @@ export const AppProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  // Real-time fields subscription
+  useEffect(() => {
+    if (!user) {
+      setFields([]);
+      return;
+    }
+
+    const fieldsRef = collection(db, 'users', user.uid, 'fields');
+    const unsubscribe = onSnapshot(fieldsRef, (snapshot) => {
+      const fieldsList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setFields(fieldsList);
+      localStorage.setItem('sfa_fields', JSON.stringify(fieldsList));
+    }, (err) => {
+      console.error("Error listening to fields:", err);
+      const local = localStorage.getItem('sfa_fields');
+      if (local) setFields(JSON.parse(local));
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Helper to preserve telemetry state between fields in client memory and localStorage
+  const prevFieldIdRef = useRef(null);
+  useEffect(() => {
+    const currentFieldId = activeFieldId;
+    const prevFieldId = prevFieldIdRef.current;
+
+    // Save previous field telemetry
+    if (prevFieldId) {
+      setFieldTelemetry(prev => {
+        const next = {
+          ...prev,
+          [prevFieldId]: { soilMoisture, soilNutrients, temperature, weather }
+        };
+        localStorage.setItem('sfa_fieldTelemetry', JSON.stringify(next));
+        return next;
+      });
+    }
+
+    // Load current field telemetry if it exists
+    if (currentFieldId && fieldTelemetry[currentFieldId]) {
+      const saved = fieldTelemetry[currentFieldId];
+      setSoilMoisture(saved.soilMoisture);
+      setSoilNutrients(saved.soilNutrients);
+      setTemperature(saved.temperature);
+      setWeather(saved.weather);
+    } else {
+      // Defaults
+      setSoilMoisture(50);
+      setSoilNutrients(50);
+      setTemperature(25);
+      setWeather('sunny');
+    }
+
+    prevFieldIdRef.current = currentFieldId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFieldId]);
+
   useEffect(() => {
     if (user) {
       if (activeCrop?.location?.lat) {
-        fetchWeather(true, activeCrop.location.lat, activeCrop.location.lon);
+        fetchWeather(true, activeCrop.location.lat, activeCrop.location.lon, activeCrop.location.name);
       } else if (farmLocation?.lat) {
         fetchWeather(true, farmLocation.lat, farmLocation.lon);
       } else {
@@ -351,7 +493,7 @@ export const AppProvider = ({ children }) => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeCrop?.id, activeCrop?.location?.lat, activeCrop?.location?.lon, farmLocation?.lat, farmLocation?.lon]);
+  }, [user, activeFieldId, activeCrop?.location?.lat, activeCrop?.location?.lon, farmLocation?.lat, farmLocation?.lon]);
 
   useEffect(() => {
     if ('speechSynthesis' in window) {
@@ -365,6 +507,7 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => {
     stopSpeaking();
+    localStorage.setItem('sfa_lang', lang);
   }, [lang]);
 
   useEffect(() => {
@@ -421,33 +564,55 @@ export const AppProvider = ({ children }) => {
   const analyzeLeaf = async () => {
     if (!selectedImage) return;
     setIsAnalyzing(true);
-    setAiResult('');
+    setDiagnosisResult('');
     
-    const prompt = `You are a helpful, expert agricultural assistant. A farmer has uploaded a picture of a leaf. Your job is to analyze the leaf for diseases, pests, or nutrient deficiencies and give the farmer a clear, actionable plan.
+    const prompt = `You are a senior agricultural plant pathologist at ICAR. Analyze the uploaded leaf image for crop type, disease/pest, danger level, immediate actions, treatment plan, and prevention.
 
-Rules for your response:
+CRITICAL RULES:
+1. Provide your response strictly in ${lang === 'kn' ? 'Kannada' : 'English'}.
+2. Do NOT output any self-correction, reasoning, thought process, or meta-comments.
+3. Return ONLY a valid raw JSON object starting with { and ending with } with this exact structure:
 
-Use extremely simple, everyday language.
-
-Do not use complex scientific names or long paragraphs.
-
-Keep it short and directly to the point.
-
-If you are unsure, tell the farmer to consult a local agriculture expert.
-
-Provide your entire response in ${lang === 'kn' ? 'Kannada' : 'English'}.
-
-Always format your response exactly like this using these headers:
-
-🌿 Crop & Problem: [Name the crop] - [Name the disease/pest, or say 'Healthy']
-⚠️ Danger Level: [Low / Medium / High]
-🛠️ What to do today: [1 or 2 simple things to do immediately in the field]
-💊 Treatment Plan: [Suggest 1 common chemical spray and 1 organic/home remedy]
-🛡️ Prevention: [1 simple tip to stop this from happening again]`;
+{
+  "problem": "Crop Name - Disease/Pest Name (e.g. Citrus - Black Spot)",
+  "danger": "Low" | "Medium" | "High",
+  "today": "1 or 2 immediate actions to take today in the field",
+  "treatment": "1 chemical spray & 1 organic remedy",
+  "prevention": "1 simple preventive measure for future crops"
+}`;
 
     const result = await callGeminiAPI(prompt, selectedImage);
+    setDiagnosisResult(result);
     setAiResult(result);
     setIsAnalyzing(false);
+  };
+
+  const askAssistant = async (queryText) => {
+    if (!queryText?.trim()) return;
+    setIsAssistantLoading(true);
+    setAssistantResult(lang === 'kn' ? `ನೀವು ಕೇಳಿದ್ದು: "${queryText}"\nAI ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಿರಿ...` : `Query: "${queryText}"\nWaiting for AI response...`);
+    
+    const cropContext = activeCrop ? `[Active Crop: ${activeCrop.name_en} (${activeCrop.variety || 'Standard'}), Growth Stage: Stage ${activeCrop.stage || 1}] ` : '';
+    const prompt = `You are a friendly, expert agricultural scientist and smart farming assistant. ${cropContext}Answer this farmer's question with practical, structured advice and bullet points in ${lang === 'kn' ? 'Kannada' : 'English'}:\nQuestion: "${queryText}"`;
+    
+    const result = await callGeminiAPI(prompt);
+    setAssistantResult(result);
+    setIsAssistantLoading(false);
+    
+    // Auto speak response if TTS supported
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(result.replace(/[*#]/g, ''));
+      utterance.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
+      let voice = lang === 'kn' ? voices.find(v => v.lang.toLowerCase().startsWith('kn')) : null;
+      if (!voice) voice = voices.find(v => v.lang.startsWith('en-US')) || voices[0];
+      if (voice) utterance.voice = voice;
+      window.speechSynthesis.speak(utterance);
+      setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+    }
+    return result;
   };
 
   const startVoiceAssistant = () => {
@@ -456,7 +621,7 @@ Always format your response exactly like this using these headers:
       const errorMsg = lang === 'kn' 
         ? "ನಿಮ್ಮ ಬ್ರೌಸರ್ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಯನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ದಯವಿಟ್ಟು ಗೂಗಲ್ ಕ್ರೋಮ್ ಬಳಸಿ." 
         : "Speech recognition is not supported in your browser. Please try Google Chrome.";
-      setAiResult(errorMsg);
+      setAssistantResult(errorMsg);
       alert(errorMsg);
       return;
     }
@@ -471,7 +636,7 @@ Always format your response exactly like this using these headers:
     recognition.onstart = () => {
       setIsListening(true);
       setTranscript('');
-      setAiResult('');
+      setAssistantResult('');
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       setIsSpeaking(false);
     };
@@ -490,7 +655,7 @@ Always format your response exactly like this using these headers:
     };
 
     recognition.onend = () => {
-      // Logic for automatic restart could go here if we wanted truly infinite listening
+      // Automatic stop handled
     };
 
     recognition.start();
@@ -504,22 +669,11 @@ Always format your response exactly like this using these headers:
     setIsListening(false);
     
     if (!transcript.trim()) {
-      setAiResult(lang === 'kn' ? "ಕ್ಷಮಿಸಿ, ನನಗೇನು ಕೇಳಿಸಲಿಲ್ಲ." : "Sorry, I didn't catch that.");
+      setAssistantResult(lang === 'kn' ? "ಕ್ಷಮಿಸಿ, ನನಗೇನು ಕೇಳಿಸಲಿಲ್ಲ." : "Sorry, I didn't catch that.");
       return;
     }
 
-    setAiResult(lang === 'kn' ? `ನೀವು ಕೇಳಿದ್ದು: "${transcript}"\nAI ಪ್ರತಿಕ್ರಿಯೆಗಾಗಿ ಕಾಯಿರಿ...` : `You asked: "${transcript}"\nWaiting for AI response...`);
-    
-    const prompt = `You are a helpful farming assistant. Answer this farming query in ${lang === 'kn' ? 'Kannada' : 'English'}: ${transcript}`;
-    const result = await callGeminiAPI(prompt);
-    
-    setAiResult(result);
-    
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(result);
-      utterance.lang = lang === 'kn' ? 'kn-IN' : 'en-US';
-      window.speechSynthesis.speak(utterance);
-    }
+    await askAssistant(transcript);
   };
 
   const handleGoogleLogin = () => {
@@ -562,6 +716,18 @@ Always format your response exactly like this using these headers:
     }
   };
 
+  const switchField = async (fieldId) => {
+    setActiveFieldId(fieldId);
+    if (user) {
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, { activeFieldId: fieldId }, { merge: true });
+      } catch (e) {
+        console.error("Failed to save activeFieldId to Firestore:", e);
+      }
+    }
+  };
+
   const value = {
     user, setUser, isLoading, setIsLoading, isDataLoading,
     activeCrop, setActiveCrop, customCrops, setCustomCrops, lang, setLang,
@@ -572,14 +738,16 @@ Always format your response exactly like this using these headers:
     advice, setAdvice, ruleAlerts,
     isSpeaking, setIsSpeaking,
     selectedImage, setSelectedImage, isAnalyzing, setIsAnalyzing,
-    aiResult, setAiResult, isListening, setIsListening,
-    transcript, setTranscript, stopVoiceAssistant,
+    aiResult, setAiResult, diagnosisResult, setDiagnosisResult,
+    assistantResult, setAssistantResult, askAssistant, isAssistantLoading,
+    isListening, setIsListening, transcript, setTranscript, stopVoiceAssistant,
     isFetchingAI, setIsFetchingAI,
     adviceRef, aiRef, t,
     stopSpeaking, handleImageUpload, analyzeLeaf, fetchWeather,
     startVoiceAssistant, handleGoogleLogin, handleLogout,
     generateAdvice, handleSpeak, loadUserData,
-    farmLocation, setFarmLocation, detectLocation
+    farmLocation, setFarmLocation, detectLocation,
+    fields, setFields, activeFieldId, setActiveFieldId, activeField, switchField
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
